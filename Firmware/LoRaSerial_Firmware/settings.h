@@ -170,14 +170,35 @@ typedef struct struct_settings {
   uint32_t triggerEnable = 0xffffffff; //Determine which triggers are enabled: 31 - 0
   uint32_t triggerEnable2 = 0xffffffff; //Determine which triggers are enabled: 63 - 32
   bool debugReceive = false; //Print receive processing
+
+  //Sprinkler Parameters
+  uint16_t pulseDuration = 250; //Milliseconds for latching solenoid pulse duration
+  uint16_t displayUpdate = 125; //Milliseconds to update the display
+  uint16_t splashScreenDelay = 3000; //Milliseconds to display the splash screen
+  bool debugSprinklers = false; //Enable debugging of sprinkler controller
+  bool displayMilliseconds = false; //Show the milliseconds on the display
 } Settings;
 Settings settings;
 
 //Monitor which devices on the device are on or offline.
 struct struct_online {
-  bool radio = false;
+  bool display = false;
   bool eeprom = false;
+  bool quadRelay = false;
+  bool radio = false;
 } online;
+
+//Increasing above 4 requires adding support for second quad relay board
+//Increasing above 8 requires more relay boards an changing ZONE_MASK type
+#define ZONE_NUMBER_MAX     4   //0 = No zone (off), 1 - 8 = Zone number
+
+typedef uint8_t ZONE_MASK;      //0 = No zone (off), bit # + 1: 1 - 8 = Zone number
+
+typedef struct _CONTROLLER_SCHEDULE
+{
+  uint32_t scheduleStartTime;     //Schedule start time offset in milliseconds
+  uint32_t zoneScheduleDuration[ZONE_NUMBER_MAX]; //Scheduled duration for the zone
+} CONTROLLER_SCHEDULE;
 
 #include <RadioLib.h> //Click here to get the library: http://librarymanager/All#RadioLib v5.1.0
 

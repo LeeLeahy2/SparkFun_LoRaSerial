@@ -40,6 +40,24 @@ void systemPrint(int value, uint8_t printType)
   systemPrint(temp);
 }
 
+void systemPrint(uint32_t value, uint8_t printType)
+{
+  char temp[20];
+
+  if (printType == HEX)
+    sprintf(temp, "%08x", value);
+  else if (printType == DEC)
+    sprintf(temp, "%lu", value);
+
+  systemPrint(temp);
+}
+
+void systemPrintln(uint32_t value, uint8_t printType)
+{
+  systemPrint(value, printType);
+  systemPrintln();
+}
+
 void systemPrintln(int value)
 {
   systemPrint(value);
@@ -105,9 +123,55 @@ void systemPrintUniqueID(uint32_t * uniqueID)
     systemPrint(id[index], HEX);
 }
 
+void systemPrintTimestamp()
+{
+  uint32_t hours;
+  uint32_t milliseconds;
+  uint32_t minutes;
+  uint32_t seconds;
+  char * string;
+  char timeString[16];
+
+  //Compute the time
+  milliseconds = millis() - startOfDay;
+  hours = milliseconds / MILLISECONDS_IN_AN_HOUR;
+  milliseconds -= hours * MILLISECONDS_IN_AN_HOUR;
+  minutes = milliseconds / MILLISECONDS_IN_A_MINUTE;
+  milliseconds -= minutes * MILLISECONDS_IN_A_MINUTE;
+  seconds = milliseconds / MILLISECONDS_IN_A_SECOND;
+  milliseconds -= seconds * MILLISECONDS_IN_A_SECOND;
+
+  //Build the string
+  string = timeString;
+  if (hours > 9)
+    *string++ = '0' + (hours / 10);
+  *string++ = '0' + (hours % 10);
+  *string++ = ':';
+  *string++ = '0' + (minutes / 10);
+  *string++ = '0' + (minutes % 10);
+  *string++ = ':';
+  *string++ = '0' + (seconds / 10);
+  *string++ = '0' + (seconds % 10);
+  *string++ = '.';
+  *string++ = '0' + (milliseconds / 100);
+  *string++ = '0' + ((milliseconds % 100) / 10);
+  *string++ = '0' + (milliseconds % 10);
+  *string++ = 0;
+
+  //Display the time
+  systemPrint(timeString);
+}
+
 void systemWrite(uint8_t value)
 {
-  arch.serialWrite(value);
+  if (printerEndpoint == PRINT_TO_SERIAL)
+    arch.serialWrite(value);
+  else if (printerEndpoint == PRINT_TO_RF)
+  {
+    //Move these characters into the transmit buffer
+    commandTXBuffer[commandTXHead++] = value;
+    commandTXHead %= sizeof(commandTXBuffer);
+  }
 }
 
 void systemFlush()

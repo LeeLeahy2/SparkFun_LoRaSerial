@@ -17,6 +17,14 @@ enum {
   TYPE_U8,
   TYPE_U16,
   TYPE_U32,
+
+  //Sprinkler Controller types
+  TYPE_DAY,
+  TYPE_DURATION,
+  TYPE_START,
+  TYPE_TIME,
+  TYPE_ZONE,
+  TYPE_ZONE_MASK,
 } TYPES;
 
 typedef bool (* VALIDATION_ROUTINE)(void * value, uint32_t valMin, uint32_t valMax);
@@ -46,6 +54,17 @@ typedef struct
 
 bool commandAT(const char * commandString)
 {
+  uint32_t currentTime;
+  int days;
+  uint32_t hours;
+  uint32_t minutes;
+  bool printStartTime;
+  uint32_t seconds;
+  char * string;
+  char timeString[16];
+  uint32_t value;
+  int zone;
+
   //'AT'
   if (commandLength == 2)
     reportOK();
@@ -58,6 +77,7 @@ bool commandAT(const char * commandString)
       case ('?'): //Display the command help
         systemPrintln("Command summary:");
         systemPrintln("  AT? - Print the command summary");
+        systemPrintln("  ATC - Clear watering schedule");
         systemPrintln("  ATF - Enter training mode and return to factory defaults");
         systemPrintln("  ATI - Display the radio version");
         systemPrintln("  ATI? - Display the information commands");
@@ -68,6 +88,12 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATT - Enter training mode");
         systemPrintln("  ATX - Stop the training server");
         systemPrintln("  ATZ - Reboot the radio");
+        break;
+      case ('C'): //Clear the watering schedule
+        memset(&week, 0, sizeof(week));
+        enableSprinklerController = false;
+        scheduleCopied = false;
+        reportOK();
         break;
       case ('F'): //Enter training mode and return to factory defaults
         reportOK();
@@ -122,12 +148,14 @@ bool commandAT(const char * commandString)
   }
 
   //ATIx commands
-  else if (commandString[2] == 'I' && commandLength == 4)
+  else if (commandString[2] == 'I' && commandLength <= 5)
   {
     uint32_t uniqueID[4];
 
     switch (commandString[3])
     {
+      default:
+        return false;
       case ('?'): //ATI? - Display the information commands
         systemPrintln("  ATI0 - Show user settable parameters");
         systemPrintln("  ATI1 - Show board variant");
@@ -138,44 +166,310 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI6 - Display AES key");
         systemPrintln("  ATI7 - Show current FHSS channel");
         systemPrintln("  ATI8 - Display unique ID");
+        systemPrintln("  ATI9 - Display the zone number");
+        systemPrintln("  ATI10 - Mask of latching solenoids");
+        systemPrintln("  ATI11 - The current zone that is on or off");
+        systemPrintln("  ATI12 - Mask of zones on/off, set only one bit!");
+        systemPrintln("  ATI13 - Previous mask of zones on and off");
+        systemPrintln("  ATI14 - Length of the pulse in milliseconds, off = 0");
+        systemPrintln("  ATI15 - Time the pulse started");
+        systemPrintln("  ATI16 - Time the zone was turned on");
+        systemPrintln("  ATI17 - Number of milliseconds from midnight (Time of day)");
+        systemPrintln("  ATI18 - Day of week");
+        systemPrintln("  ATI19 - Display the weekly schedule");
         break;
       case ('0'): //ATI0 - Show user settable parameters
         displayParameters();
         break;
       case ('1'): //ATI1 - Show board variant
-        systemPrint("SparkFun LoRaSerial ");
-        systemPrint(platformPrefix);
-        systemPrint("\r\n");
+        switch (commandString[4])
+        {
+        default:
+          return false;
+        case 0:
+          systemPrint("SparkFun LoRaSerial ");
+          systemPrint(platformPrefix);
+          systemPrint("\r\n");
+          break;
+        case '0': //ATI10 - Mask of latching solenoids
+          systemPrint("latchingSolenoids: 0x");
+          systemPrintln(latchingSolenoid, HEX);
+          break;
+        case '1': //ATI11 - The current zone that is on or off
+          systemPrint("zoneActive: 0x");
+          systemPrintln(zoneActive, HEX);
+          break;
+        case '2': //ATI12 - Mask of zones on/off, set only one bit!
+          systemPrint("zoneManualOn: 0x");
+          systemPrintln(zoneManualOn, HEX);
+          break;
+        case '3': //ATI13 - Previous mask of zones on and off
+          systemPrint("zoneManualPreviousOn: 0x");
+          systemPrintln(zoneManualPreviousOn, HEX);
+          break;
+        case '4': //ATI14 - Length of the pulse in milliseconds, off = 0
+          //Compute the time
+          seconds = currentTime - onTime;
+          days = seconds / MILLISECONDS_IN_A_DAY;
+          seconds -= days * MILLISECONDS_IN_A_DAY;
+          hours = seconds / MILLISECONDS_IN_AN_HOUR;
+          seconds -= hours * MILLISECONDS_IN_AN_HOUR;
+          minutes = seconds / MILLISECONDS_IN_A_MINUTE;
+          seconds -= minutes * MILLISECONDS_IN_A_MINUTE;
+          seconds /= MILLISECONDS_IN_A_SECOND;
+
+          string = timeString;
+          if (days)
+          {
+            *string++ = '0' + days;
+            *string++ = ' ';
+          }
+          if (hours > 9)
+            *string++ = '0' + (hours / 10);
+          if (hours)
+          {
+            *string++ = '0' + (hours % 10);
+            *string++ = ':';
+          }
+          if ((minutes > 9) || hours)
+            *string++ = '0' + (minutes / 10);
+          if (minutes)
+          {
+            *string++ = '0' + (minutes % 10);
+            *string++ = ':';
+          }
+          if ((seconds > 9) || minutes)
+            *string++ = '0' + (seconds / 10);
+          *string++ = '0' + (seconds % 10);
+          *string++ = 0;
+
+          //Display the time the valve is on
+          systemPrint("pulseDuration: 0x");
+          systemPrintln(timeString);
+          break;
+        case '5': //ATI15 - Time the pulse started
+          systemPrint("pulseStartTime: 0x");
+          systemPrintln(pulseStartTime, HEX);
+          break;
+        case '6': //ATI16 - Time the zone was turned on
+          systemPrint("onTime: 0x");
+          systemPrintln(onTime, HEX);
+          break;
+        case '7': //ATI17 - Number of milliseconds from midnight (Time of day)
+          //Compute the time
+          seconds = timeOfDay - startOfDay;
+          seconds -= days * MILLISECONDS_IN_A_DAY;
+          hours = seconds / MILLISECONDS_IN_AN_HOUR;
+          seconds -= hours * MILLISECONDS_IN_AN_HOUR;
+          minutes = seconds / MILLISECONDS_IN_A_MINUTE;
+          seconds -= minutes * MILLISECONDS_IN_A_MINUTE;
+          seconds /= MILLISECONDS_IN_A_SECOND;
+
+          //Build the string
+          string = timeString;
+          *string++ = ' ';
+          *string++ = '(';
+          if (hours > 9)
+            *string++ = '0' + (hours / 10);
+          if (hours)
+          {
+            *string++ = '0' + (hours % 10);
+            *string++ = ':';
+          }
+          if ((minutes > 9) || hours)
+            *string++ = '0' + (minutes / 10);
+          if (minutes)
+          {
+            *string++ = '0' + (minutes % 10);
+            *string++ = ':';
+          }
+          if ((seconds > 9) || minutes)
+            *string++ = '0' + (seconds / 10);
+          *string++ = '0' + (seconds % 10);
+          *string++ = ')';
+          *string++ = 0;
+
+          //Display the time
+          systemPrint("timeOfDay: ");
+          systemPrint(timeOfDay);
+          systemPrintln(timeString);
+          break;
+        case '8': //ATI18 - Day of week
+          systemPrint("dayOfWeek: ");
+          systemPrint(dayOfWeek);
+          systemPrint (" (");
+          string = timeString;
+          *string++ = dayLetter[dayOfWeek];
+          *string++ = ',';
+          *string++ = ' ';
+          strcat(string, dayName[dayOfWeek]);
+          systemPrint(timeString);
+          systemPrintln(")");
+          break;
+        case '9': //ATI19 - Display the weekly schedule
+          for (days = 0; days < 7; days++)
+          {
+            printStartTime = true;
+            for (zone = 1; zone <= ZONE_NUMBER_MAX; zone++)
+            {
+              value = week[days].zoneScheduleDuration[zone - 1];
+              if (value)
+              {
+                //Display the start time
+                if (printStartTime)
+                {
+                  printStartTime = false;
+
+                  //Compute the time
+                  seconds = week[days].scheduleStartTime;
+                  hours = seconds / MILLISECONDS_IN_AN_HOUR;
+                  seconds -= hours * MILLISECONDS_IN_AN_HOUR;
+                  minutes = seconds / MILLISECONDS_IN_A_MINUTE;
+                  seconds -= minutes * MILLISECONDS_IN_A_MINUTE;
+                  seconds /= MILLISECONDS_IN_A_SECOND;
+
+                  //Build the string
+                  string = timeString;
+                  if (hours > 9)
+                    *string++ = '0' + (hours / 10);
+                  *string++ = '0' + (hours % 10);
+                  *string++ = ':';
+                  *string++ = '0' + (minutes / 10);
+                  *string++ = '0' + (minutes % 10);
+                  *string++ = ':';
+                  *string++ = '0' + (seconds / 10);
+                  *string++ = '0' + (seconds % 10);
+                  *string++ = 0;
+
+                  //Display the start time
+                  systemPrint(dayName[days]);
+                  systemPrint(" @ ");
+                  systemPrintln(timeString);
+                }
+
+                //Compute the time
+                seconds = value;
+                hours = seconds / MILLISECONDS_IN_AN_HOUR;
+                seconds -= hours * MILLISECONDS_IN_AN_HOUR;
+                minutes = seconds / MILLISECONDS_IN_A_MINUTE;
+                seconds -= minutes * MILLISECONDS_IN_A_MINUTE;
+                seconds /= MILLISECONDS_IN_A_SECOND;
+
+                //Build the string
+                string = timeString;
+                if (hours > 9)
+                  *string++ = '0' + (hours / 10);
+                *string++ = '0' + (hours % 10);
+                *string++ = ':';
+                *string++ = '0' + (minutes / 10);
+                *string++ = '0' + (minutes % 10);
+                *string++ = ':';
+                *string++ = '0' + (seconds / 10);
+                *string++ = '0' + (seconds % 10);
+                *string++ = 0;
+
+                //Display the time
+                systemPrint("    Zone ");
+                systemPrint(zone);
+                systemPrint(": ");
+                systemPrint(value);
+                systemPrint(" (");
+                systemPrint(timeString);
+                systemPrintln(")");
+              }
+            }
+          }
+          systemPrintln("OK");
+          break;
+        }
         break;
       case ('2'): //ATI2 - Show firmware version
-        systemPrint(FIRMWARE_VERSION_MAJOR);
-        systemPrint(".");
-        systemPrintln(FIRMWARE_VERSION_MINOR);
+        switch (commandString[4])
+        {
+        default:
+          return false;
+        case 0:
+          systemPrint(FIRMWARE_VERSION_MAJOR);
+          systemPrint(".");
+          systemPrintln(FIRMWARE_VERSION_MINOR);
+          break;
+        }
         break;
       case ('3'): //ATI3 - Display latest RSSI
-        systemPrintln(radio.getRSSI());
+        switch (commandString[4])
+        {
+        default:
+          return false;
+        case 0:
+          systemPrintln(radio.getRSSI());
+          break;
+        }
         break;
       case ('4'): //ATI4 - Get random byte from RSSI
-        systemPrintln(radio.randomByte());
+        switch (commandString[4])
+        {
+        default:
+          return false;
+        case 0:
+          systemPrintln(radio.randomByte());
+          break;
+        }
         break;
       case ('5'): //ATI5 - Show max possible bytes per second
-        systemPrintln(calcMaxThroughput());
+        switch (commandString[4])
+        {
+        default:
+          return false;
+        case 0:
+          systemPrintln(calcMaxThroughput());
+          break;
+        }
         break;
       case ('6'): //ATI6 - Display AES key
-        for (uint8_t i = 0 ; i < 16 ; i++)
-          systemPrint(settings.encryptionKey[i], HEX);
-        systemPrintln();
+        switch (commandString[4])
+        {
+        default:
+          return false;
+        case 0:
+          for (uint8_t i = 0 ; i < 16 ; i++)
+            systemPrint(settings.encryptionKey[i], HEX);
+          systemPrintln();
+          break;
+        }
         break;
       case ('7'): //ATI7 - Show current FHSS channel
-        systemPrintln(radio.getFHSSChannel());
+        switch (commandString[4])
+        {
+        default:
+          return false;
+        case 0:
+          systemPrintln(radio.getFHSSChannel());
+          break;
+        }
         break;
       case ('8'): //ATI8 - Display the unique ID
-        arch.uniqueID(uniqueID);
-        systemPrintUniqueID(uniqueID);
-        systemPrintln();
+        switch (commandString[4])
+        {
+        default:
+          return false;
+        case 0:
+          arch.uniqueID(uniqueID);
+          systemPrintUniqueID(uniqueID);
+          systemPrintln();
+          break;
+        }
         break;
-      default:
-        return false;
+      case ('9'): //ATI9 - Display the zone number
+        switch (commandString[4])
+        {
+        default:
+          return false;
+        case 0:
+          systemPrint("Zone: ");
+          systemPrintln(zoneNumber);
+          break;
+        }
+        break;
     }
   }
 
@@ -495,6 +789,24 @@ const COMMAND_ENTRY commands[] =
   {42,    0,   1,    0, TYPE_BOOL,         valInt,         "DebugReceive",         &settings.debugReceive},
 
   //Define any user parameters starting at 255 decrementing towards 0
+
+  //Sprinkler Controller parameters
+  {242,   0,   1,    0, TYPE_ZONE_MASK,    valInt,         "ZoneManualOn",         &zoneManualOn},
+  {243,   0,   1,    0, TYPE_BOOL,         valInt,         "DisplayMilliseconds",  &settings.displayMilliseconds},
+  {244,   0, 15000,  0, TYPE_U16,          valInt,         "SplashScreenDelay",    &settings.splashScreenDelay},
+  {245,  50,  1000,  0, TYPE_U16,          valInt,         "DisplayUpdate",        &settings.displayUpdate},
+
+  {246,   0,   1,    0, TYPE_BOOL,         valInt,         "DebugSprinklers",      &settings.debugSprinklers},
+  {247,   0,   1,    0, TYPE_ZONE_MASK,    valInt,         "LatchingSolenoid",     &latchingSolenoid},
+  {248,   0,   1,    0, TYPE_BOOL,         valInt,         "EnableController",     &enableSprinklerController},
+  {249,   0, 86399999, 0, TYPE_START,      valInt,         "StartTime",            &week},
+  {250,   0,  7200000, 0, TYPE_DURATION,   valInt,         "ZoneDuration",         &week},
+
+  {251,   0, ZONE_NUMBER_MAX, 0, TYPE_U8,  valInt,         "CommandZone",          &commandZone},
+  {252,   0,   6,    0, TYPE_DAY,          valInt,         "CommandDay",           &commandDay},
+  {253,   0, 86399999, 0, TYPE_TIME,       valInt,         "Time of Day",          &timeOfDay},
+  {254,   0,   6,    0, TYPE_DAY,          valInt,         "Day of Week",          &dayOfWeek},
+  {255, 100, 1000,   0, TYPE_U16,          valInt,         "Pulse Duration",       &settings.pulseDuration},
 };
 
 const int commandCount = sizeof(commands) / sizeof(commands[0]);
@@ -526,6 +838,14 @@ void commandDisplay(uint8_t number, bool printName)
 {
   const COMMAND_ENTRY * command;
   const COMMAND_ENTRY * commandEnd;
+  int days;
+  uint32_t hours;
+  uint32_t minutes;
+  CONTROLLER_SCHEDULE * schedule;
+  uint32_t seconds;
+  char * string;
+  char timeString[16];
+  uint32_t value;
 
   //Locate the command
   command = &commands[0];
@@ -553,6 +873,43 @@ void commandDisplay(uint8_t number, bool printName)
     case TYPE_BOOL:
       systemPrint((uint8_t)(*(bool *)(command->setting)));
       break;
+    case TYPE_DURATION:
+      if (!commandZone)
+        break;
+      schedule = (CONTROLLER_SCHEDULE *)command->setting;
+      value = schedule[commandDay].zoneScheduleDuration[commandZone-1];
+
+      //Compute the time
+      seconds = value;
+      hours = seconds / MILLISECONDS_IN_AN_HOUR;
+      seconds -= hours * MILLISECONDS_IN_AN_HOUR;
+      minutes = seconds / MILLISECONDS_IN_A_MINUTE;
+      seconds -= minutes * MILLISECONDS_IN_A_MINUTE;
+      seconds /= MILLISECONDS_IN_A_SECOND;
+
+      //Build the string
+      string = timeString;
+      if (hours > 9)
+        *string++ = '0' + (hours / 10);
+      *string++ = '0' + (hours % 10);
+      *string++ = ':';
+      *string++ = '0' + (minutes / 10);
+      *string++ = '0' + (minutes % 10);
+      *string++ = ':';
+      *string++ = '0' + (seconds / 10);
+      *string++ = '0' + (seconds % 10);
+      *string++ = 0;
+
+      //Display the time
+      systemPrint(value);
+      systemPrint(" (");
+      systemPrint(dayName[commandDay]);
+      systemPrint(" zone ");
+      systemPrint(commandZone);
+      systemPrint(" ");
+      systemPrint(timeString);
+      systemPrint(")");
+      break;
     case TYPE_FLOAT:
       systemPrint(*((float *)(command->setting)), command->digits);
       break;
@@ -570,6 +927,78 @@ void commandDisplay(uint8_t number, bool printName)
     case TYPE_U32:
       systemPrint(*(uint32_t *)(command->setting));
       break;
+    case TYPE_START:
+      schedule = (CONTROLLER_SCHEDULE *)command->setting;
+      value = schedule[commandDay].scheduleStartTime;
+
+      //Compute the time
+      seconds = value;
+      hours = seconds / MILLISECONDS_IN_AN_HOUR;
+      seconds -= hours * MILLISECONDS_IN_AN_HOUR;
+      minutes = seconds / MILLISECONDS_IN_A_MINUTE;
+      seconds -= minutes * MILLISECONDS_IN_A_MINUTE;
+      seconds /= MILLISECONDS_IN_A_SECOND;
+
+      //Build the string
+      string = timeString;
+      if (hours > 9)
+        *string++ = '0' + (hours / 10);
+      *string++ = '0' + (hours % 10);
+      *string++ = ':';
+      *string++ = '0' + (minutes / 10);
+      *string++ = '0' + (minutes % 10);
+      *string++ = ':';
+      *string++ = '0' + (seconds / 10);
+      *string++ = '0' + (seconds % 10);
+      *string++ = 0;
+
+      //Display the time
+      systemPrint(value);
+      systemPrint(" (");
+      systemPrint(dayName[commandDay]);
+      systemPrint(" @ ");
+      systemPrint(timeString);
+      systemPrint(")");
+      break;
+    case TYPE_TIME:
+      //Compute the time
+      seconds = *(uint32_t *)(command->setting) - startOfDay;
+      hours = seconds / MILLISECONDS_IN_AN_HOUR;
+      seconds -= hours * MILLISECONDS_IN_AN_HOUR;
+      minutes = seconds / MILLISECONDS_IN_A_MINUTE;
+      seconds -= minutes * MILLISECONDS_IN_A_MINUTE;
+      seconds /= MILLISECONDS_IN_A_SECOND;
+
+      //Build the string
+      string = timeString;
+      if (hours > 9)
+        *string++ = '0' + (hours / 10);
+      *string++ = '0' + (hours % 10);
+      *string++ = ':';
+      *string++ = '0' + (minutes / 10);
+      *string++ = '0' + (minutes % 10);
+      *string++ = ':';
+      *string++ = '0' + (seconds / 10);
+      *string++ = '0' + (seconds % 10);
+      *string++ = 0;
+
+      //Display the time
+      systemPrint((uint32_t)(*(uint32_t *)(command->setting)));
+      systemPrint(" (");
+      systemPrint(timeString);
+      systemPrint(")");
+      break;
+    case TYPE_DAY:
+      systemPrint(*(uint8_t *)(command->setting));
+      systemPrint(" (");
+      systemWrite(dayLetter[*(uint8_t *)(command->setting)]);
+      systemPrint(", ");
+      systemPrint(dayName[*(uint8_t *)(command->setting)]);
+      systemPrint(")");
+      break;
+    case TYPE_ZONE_MASK:
+      systemPrintln(((*(ZONE_MASK *)(command->setting)) >> commandZone) & 1);
+      break;
   }
   systemPrintln();
 }
@@ -582,6 +1011,7 @@ bool commandSet(const char * commandString)
   double doubleSettingValue;
   int index;
   uint32_t number;
+  CONTROLLER_SCHEDULE * schedule;
   uint32_t settingValue;
   bool valid;
 
@@ -618,6 +1048,15 @@ bool commandSet(const char * commandString)
         if (valid)
           *(bool *)(command->setting) = (bool)settingValue;
         break;
+      case TYPE_DURATION:
+        valid = command->validate((void *)&settingValue, command->minValue, command->maxValue)
+              && commandZone;
+        if (valid)
+        {
+          schedule = (CONTROLLER_SCHEDULE *)command->setting;
+          schedule[commandDay].zoneScheduleDuration[commandZone- 1] = settingValue;
+        }
+        break;
       case TYPE_FLOAT:
         valid = command->validate((void *)&doubleSettingValue, command->minValue, command->maxValue);
         if (valid)
@@ -631,11 +1070,21 @@ bool commandSet(const char * commandString)
         break;
       case TYPE_SPEED_AIR:
       case TYPE_SPEED_SERIAL:
+      case TYPE_TIME:
       case TYPE_U32:
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)
           *(uint32_t *)(command->setting) = settingValue;
         break;
+      case TYPE_START:
+        valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
+        if (valid)
+        {
+          schedule = (CONTROLLER_SCHEDULE *)command->setting;
+          schedule[commandDay].scheduleStartTime = settingValue;
+        }
+        break;
+      case TYPE_DAY:
       case TYPE_U8:
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)
@@ -645,6 +1094,14 @@ bool commandSet(const char * commandString)
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)
           *(uint16_t *)(command->setting) = (uint16_t)settingValue;
+        break;
+      case TYPE_ZONE_MASK:
+        valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
+        if (valid)
+        {
+          *(ZONE_MASK *)(command->setting) &= ~(1 << (commandZone- 1));
+          *(ZONE_MASK *)(command->setting) |= settingValue << (commandZone - 1);
+        }
         break;
     }
     if (valid == false)

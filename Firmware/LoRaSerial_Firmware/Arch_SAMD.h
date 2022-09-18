@@ -18,8 +18,10 @@ WDTZero myWatchDog;
                    +--------------+                                |
                    |     SAMD     |                                |
                    |              |                                |
-    TTL Serial <-->| Serial1      |       +--------------+         V
-                   |          SPI |<----->| SX1276 Radio |<---> Antenna
+                   |  Sprinkler   |                                |
+                   |  Controller  |                                |
+                   |              |       +--------------+         V
+        Debug      |          SPI |<----->| SX1276 Radio |<---> Antenna
     USB Serial <-->| Serial       |       +--------------+
                    +--------------+
 
@@ -134,18 +136,17 @@ void samdBeginBoard()
 
 void samdBeginSerial(uint16_t serialSpeed)
 {
-  Serial1.begin(serialSpeed);
-
-#if defined(ENABLE_DEVELOPER)
   //Wait for serial to come online for debug printing
-  while (!Serial);
-#endif  //ENABLE_DEVELOPER
+  if (settings.usbSerialWait)
+    while (!Serial);
 }
 
 void samdBeginWDT()
 {
+#ifdef  ENABLE_WDT
   myWatchDog.setup(WDT_HARDCYCLE250m);  // Initialize WDT with 250ms timeout
   petTimeoutHalf = 250 / 2;
+#endif  //ENABLE_WDT
 }
 
 void samdEepromBegin()
@@ -161,7 +162,9 @@ void samdEepromCommit()
 void samdPetWDT()
 {
   //This takes 4-5ms to complete
+#ifdef  ENABLE_WDT
   myWatchDog.clear();
+#endif  //ENABLE_WDT
 }
 
 Module * samdRadio()
@@ -171,19 +174,17 @@ Module * samdRadio()
 
 bool samdSerialAvailable()
 {
-  return (Serial.available() || Serial1.available());
+  return (Serial.available());
 }
 
 void samdSerialFlush()
 {
   Serial.flush();
-  Serial1.flush();
 }
 
 void samdSerialPrint(const char * value)
 {
   Serial.print(value);
-  Serial1.print(value);
 }
 
 uint8_t samdSerialRead()
@@ -191,15 +192,12 @@ uint8_t samdSerialRead()
   byte incoming = 0;
   if (Serial.available())
     incoming = Serial.read();
-  else if (Serial1.available())
-    incoming = Serial1.read();
   return (incoming);
 }
 
 void samdSerialWrite(uint8_t value)
 {
   Serial.write(value);
-  Serial1.write(value);
 }
 
 void samdSystemReset()
