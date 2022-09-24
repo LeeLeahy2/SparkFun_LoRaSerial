@@ -12,9 +12,7 @@ uint16_t availableRXBytes()
 //Returns true if CTS is asserted (high = host says it's ok to send data)
 bool isCTS()
 {
-  if (pin_cts == PIN_UNDEFINED) return (true); //CTS not implmented on this board
-  if (settings.flowControl == false) return (true); //CTS turned off
-  return (digitalRead(pin_cts) == HIGH) ^ settings.invertCts;
+  return true;
 }
 
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -54,8 +52,6 @@ void serialBufferOutput(uint8_t * data, uint16_t dataLength)
 void updateRTS(bool assertRTS)
 {
     rtsAsserted = assertRTS;
-    if (settings.flowControl && (pin_rts != PIN_UNDEFINED))
-      digitalWrite(pin_rts, assertRTS ^ settings.invertRts);
 }
 
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
