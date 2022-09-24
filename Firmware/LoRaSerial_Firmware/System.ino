@@ -742,3 +742,18 @@ void triggerFrequency(uint16_t frequency)
   delayMicroseconds(frequency);
   digitalWrite(pin_trigger, HIGH);
 }
+
+void rainSensorIsr()
+{
+  uint32_t currentTime;
+  static uint32_t lastInterruptTime;
+  static bool waterDetected;
+
+  currentTime = millis();
+  if ((currentTime - lastInterruptTime) > 10)
+  {
+    lastInterruptTime = currentTime;
+    waterDetected = !waterDetected;
+    rxLED(waterDetected);
+  }
+}
