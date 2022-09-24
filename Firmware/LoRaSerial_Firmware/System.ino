@@ -623,3 +623,18 @@ int stricmp(const char * str1, const char * str2)
   //Return the difference between the two strings
   return char1 - char2;
 }
+
+void rainSensorIsr()
+{
+  uint32_t currentTime;
+  static uint32_t lastInterruptTime;
+  static bool waterDetected;
+
+  currentTime = millis();
+  if ((currentTime - lastInterruptTime) > 10)
+  {
+    lastInterruptTime = currentTime;
+    waterDetected = !waterDetected;
+    rxLED(waterDetected);
+  }
+}

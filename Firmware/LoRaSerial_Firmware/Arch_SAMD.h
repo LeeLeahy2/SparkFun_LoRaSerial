@@ -6,6 +6,8 @@
 
 WDTZero myWatchDog;
 
+void rainSensorIsr();
+
 /*
   Data flow
                    +--------------+
@@ -44,7 +46,7 @@ WDTZero myWatchDog;
                           | 38 PA13      |
                           | 0  PA10      |
                           | 1  PA11      |
-                          | 30 PB22      |
+    Rain Sensor --------->| 30 PB22      |
                           |              |
                           |      PA09  3 |---> rxen ---> LORA_RXEN
                           |      PA14  2 |---> txen ---> LORA_TXEN
@@ -58,6 +60,8 @@ WDTZero myWatchDog;
                           |      PA22 20 |---> SDA
                           +--------------+
 */
+
+const int pin_RainSensor = 30;
 
 void samdBeginBoard()
 {
@@ -95,6 +99,10 @@ void samdBeginBoard()
   digitalWrite(pin_txLED, LOW);
   pinMode(pin_rxLED, OUTPUT);
   digitalWrite(pin_rxLED, LOW);
+
+  //Rain sensor
+  pinMode(pin_RainSensor, INPUT);
+  attachInterrupt(digitalPinToInterrupt(pin_RainSensor), rainSensorIsr, CHANGE);
 
   //Train button input
   pinMode(pin_trainButton, INPUT_PULLUP);
