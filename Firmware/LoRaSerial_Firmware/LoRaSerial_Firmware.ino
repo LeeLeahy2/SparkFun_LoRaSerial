@@ -502,6 +502,9 @@ void setup()
 
   updateRTS(true); //Enable serial input
 
+samdGpioPortConfig('A');
+samdGpioPortConfig('B');
+samdGpioPortConfig('C');
   systemPrintTimestamp();
   systemPrintln("LRS Setup Complete");
   outputSerialData(true);
