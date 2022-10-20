@@ -505,6 +505,9 @@ void setup()
 samdGpioPortConfig('A');
 samdGpioPortConfig('B');
 samdGpioPortConfig('C');
+
+  rainSensorBegin(); //Enable the rain sensor input
+
   systemPrintTimestamp();
   systemPrintln("LRS Setup Complete");
   outputSerialData(true);

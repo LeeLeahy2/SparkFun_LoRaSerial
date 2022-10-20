@@ -59,6 +59,7 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATO - Exit command mode");
         systemPrintln("  ATP - Display probe trigger settings");
         systemPrintln("  ATR - Display radio settings");
+        systemPrintln("  ATQ - Print the previous rain sensor pulse data");
         systemPrintln("  ATS - Display the serial settings");
         systemPrintln("  ATT - Enter training mode");
         systemPrintln("  ATV - Display virtual circuit settings");
@@ -117,6 +118,10 @@ bool commandAT(const char * commandString)
             petWDT();
         }
         break;
+      case ('Q'): //Print the previous rain sensor pulse data
+        rainSensorPulsePrint();
+        reportOK();
+	break;
       case ('T'): //Enter training mode
         reportOK();
         selectTraining(false);

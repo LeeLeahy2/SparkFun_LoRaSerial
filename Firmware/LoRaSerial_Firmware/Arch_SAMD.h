@@ -100,10 +100,6 @@ void samdBeginBoard()
   pinMode(pin_rxLED, OUTPUT);
   digitalWrite(pin_rxLED, LOW);
 
-  //Rain sensor
-  pinMode(pin_RainSensor, INPUT);
-  attachInterrupt(digitalPinToInterrupt(pin_RainSensor), rainSensorIsr, CHANGE);
-
   //Train button input
   pinMode(pin_trainButton, INPUT_PULLUP);
 
