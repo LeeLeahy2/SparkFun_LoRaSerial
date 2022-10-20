@@ -453,6 +453,11 @@ Settings originalSettings; //Create a duplicate of settings during training so t
 char platformPrefix[25]; //Used for printing platform specific device name, ie "SAMD21 1W 915MHz"
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
+//Global variables - Rain sensor
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+uint32_t rainCount; //Number of times the rain sensor dumped 0.2794mm of water
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
 //Architecture variables
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 void updateRTS(bool assertRTS);
