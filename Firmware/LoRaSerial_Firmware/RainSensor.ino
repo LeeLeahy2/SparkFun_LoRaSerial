@@ -54,6 +54,13 @@ void rainSensorIsr()
       //Indicate rain detected
       rainCount++;
 
+      //Rain sensor - Detect changes in the level of the rain sensor switch
+      //
+      //  5V  ____________________                      ______________________
+      //  0V                      01010______..._____101
+      //                          Noise             Noise
+      //
+
       //Show the switch closed time
       rainSensorTempBuffer[rainSensorTempBufferOffset++] = '_';
       rainSensorTempBuffer[rainSensorTempBufferOffset++] = '_';
