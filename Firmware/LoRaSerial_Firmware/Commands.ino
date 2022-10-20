@@ -69,6 +69,7 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI? - Display the information commands");
         systemPrintln("  ATIn - Display system information");
         systemPrintln("  ATO - Exit command mode");
+        systemPrintln("  ATP - Print the previous rain sensor pulse data");
         systemPrintln("  ATR - VC link reset");
         systemPrintln("  ATSn=xxx - Set parameter n's value to xxx");
         systemPrintln("  ATSn? - Print parameter n's current value");
@@ -114,6 +115,10 @@ bool commandAT(const char * commandString)
           changeState(RADIO_RESET);
         }
         break;
+      case ('P'): //Print the previous rain sensor pulse data
+        rainSensorPulsePrint();
+        reportOK();
+	break;
       case ('R'): //VC link reset
         reportOK();
         if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)

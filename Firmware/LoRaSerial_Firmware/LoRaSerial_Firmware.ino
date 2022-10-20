@@ -493,6 +493,9 @@ void setup()
 samdGpioPortConfig('A');
 samdGpioPortConfig('B');
 samdGpioPortConfig('C');
+
+  rainSensorBegin(); //Enable the rain sensor input
+
   systemPrintTimestamp();
   systemPrintln("LRS Setup Complete");
 
@@ -511,6 +514,8 @@ void loop()
     updateLeds();
 
   updateRadioState(); //Ping/ack/send packets as needed
+
+  rainSensorUpdate();
 
   if (clearDIO1) //Allow DIO1 hop ISR but use it only for debug
   {
