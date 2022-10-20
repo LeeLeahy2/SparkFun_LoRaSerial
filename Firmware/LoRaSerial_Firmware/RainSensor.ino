@@ -51,6 +51,9 @@ void rainSensorIsr()
     //Determine if the middle of the pulse has passed
     if ((millis() - rainSensorLastInterruptTime) >= 2)
     {
+      //Indicate rain detected
+      rainCount++;
+
       //Show the switch closed time
       rainSensorTempBuffer[rainSensorTempBufferOffset++] = '_';
       rainSensorTempBuffer[rainSensorTempBufferOffset++] = '_';

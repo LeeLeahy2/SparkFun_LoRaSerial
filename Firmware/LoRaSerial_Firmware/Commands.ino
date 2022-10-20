@@ -180,6 +180,9 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI24 - Display the VC details");
         systemPrintln("  ATI25 - Display the total insufficient buffer count");
         systemPrintln("  ATI26 - Display the total number of bad CRC frames");
+
+        //Add user commands after this line
+        systemPrintln("  ATI99 - Display rain counter value");
         break;
       case ('0'): //ATI0 - Show user settable parameters
         displayParameters(0, true);
@@ -351,6 +354,20 @@ bool commandAT(const char * commandString)
       case ('6'): //ATI26 - Display the total number of bad CRC frames
         systemPrint("Total number of bad CRC frames: ");
         systemPrintln(badCrc);
+        break;
+    }
+  }
+
+  //User ATIxx commands
+  else if ((commandString[2] == 'I') && (commandString[3] == '9') && (commandLength == 5))
+  {
+    switch (commandString[4])
+    {
+      default:
+        return false;
+      case ('9'): //ATI99 - Display rain counter value
+        systemPrint("Rain count: ");
+        systemPrintln(rainCount);
         break;
     }
   }
