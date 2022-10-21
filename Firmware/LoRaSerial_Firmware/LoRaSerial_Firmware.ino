@@ -463,9 +463,13 @@ Settings originalSettings; //Create a duplicate of settings during training so t
 char platformPrefix[25]; //Used for printing platform specific device name, ie "SAMD21 1W 915MHz"
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-//Global variables - Rain sensor
+//Global variables - Weather Station
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-uint32_t rainCount; //Number of times the rain sensor dumped 0.2794mm of water
+uint32_t rainCount; //Number of times the rain sensor dumped 0.2794mm (0.010984252in) of water
+uint32_t windCount; //Number of times the wind switch closed, one closure/sec = 2.4km/h (1.49129 mi/h)
+
+double windSpeedKmPerHr;
+double windSpeedMiPerHr;
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 //Architecture variables
@@ -507,11 +511,7 @@ void setup()
 
   updateRTS(true); //Enable serial input
 
-samdGpioPortConfig('A');
-samdGpioPortConfig('B');
-samdGpioPortConfig('C');
-
-  rainSensorBegin(); //Enable the rain sensor input
+  windSensorBegin(); //Enable the rain sensor input
 
   systemPrintTimestamp();
   systemPrintln("LRS Setup Complete");

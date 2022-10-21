@@ -7,6 +7,7 @@
 WDTZero myWatchDog;
 
 void rainSensorIsr();
+void windSensorIsr();
 
 /*
   Data flow
@@ -62,6 +63,7 @@ void rainSensorIsr();
 */
 
 const int pin_RainSensor = 30;
+const int pin_WindSensor = 30;
 
 void samdBeginBoard()
 {
