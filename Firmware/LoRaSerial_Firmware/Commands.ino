@@ -69,7 +69,6 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI? - Display the information commands");
         systemPrintln("  ATIn - Display system information");
         systemPrintln("  ATO - Exit command mode");
-        systemPrintln("  ATP - Print the previous rain sensor pulse data");
         systemPrintln("  ATR - VC link reset");
         systemPrintln("  ATSn=xxx - Set parameter n's value to xxx");
         systemPrintln("  ATSn? - Print parameter n's current value");
@@ -115,10 +114,6 @@ bool commandAT(const char * commandString)
           changeState(RADIO_RESET);
         }
         break;
-      case ('P'): //Print the previous rain sensor pulse data
-        rainSensorPulsePrint();
-        reportOK();
-	break;
       case ('R'): //VC link reset
         reportOK();
         if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
@@ -189,6 +184,8 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI26 - Display the total number of bad CRC frames");
 
         //Add user commands after this line
+        systemPrintln("  ATI97 - Display wind speed");
+        systemPrintln("  ATI98 - Display wind counter value");
         systemPrintln("  ATI99 - Display rain counter value");
         break;
       case ('0'): //ATI0 - Show user settable parameters
@@ -375,6 +372,17 @@ bool commandAT(const char * commandString)
       case ('9'): //ATI99 - Display rain counter value
         systemPrint("Rain count: ");
         systemPrintln(rainCount);
+        break;
+      case ('8'): //ATI98 - Display wind counter value
+        systemPrint("Wind count: ");
+        systemPrintln(windCount);
+        break;
+      case ('7'): //ATI97 - Display wind speed
+        systemPrint("Wind speed: ");
+        systemPrint((float)windSpeedMiPerHr);
+        systemPrint(" mi/hr (");
+        systemPrint((float)windSpeedKmPerHr);
+        systemPrintln(" km/hr)");
         break;
     }
   }
