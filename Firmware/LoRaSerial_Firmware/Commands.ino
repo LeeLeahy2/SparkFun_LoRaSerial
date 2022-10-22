@@ -34,6 +34,7 @@ bool commandAT(const char * commandString)
 {
   VIRTUAL_CIRCUIT * vc;
   unsigned long timer;
+  int entries;
 
   //'AT'
   if (commandLength == 2)
@@ -182,6 +183,8 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI26 - Display the total number of bad CRC frames");
 
         //Add user commands after this line
+        systemPrintln("  ATI96 - Display wind counts");
+        systemPrintln("  ATI97 - Display rain counts");
         systemPrintln("  ATI98 - Display wind gauge values");
         systemPrintln("  ATI99 - Display rain gauge values");
         break;
@@ -371,6 +374,28 @@ bool commandAT(const char * commandString)
         break;
       case ('8'): //ATI98 - Display wind gauge values
         displayWindSpeed();
+        break;
+      case ('7'): //ATI97 - Display rain counts
+        entries = sizeof(rainCount) / sizeof(rainCount[0]);
+        for (int i = 0; i < entries; i++)
+        {
+          systemPrint(rainCount[i]);
+          if ((((i + 1) % 10) == 0) || ((i + 1) == entries))
+            systemPrintln();
+          else
+            systemPrint(", ");
+        }
+        break;
+      case ('6'): //ATI96 - Display wind counts
+        entries = sizeof(windCount) / sizeof(windCount[0]);
+        for (int i = 0; i < entries; i++)
+        {
+          systemPrint(windCount[i]);
+          if ((((i + 1) % 10) == 0) || ((i + 1) == entries))
+            systemPrintln();
+          else
+            systemPrint(", ");
+        }
         break;
     }
   }
