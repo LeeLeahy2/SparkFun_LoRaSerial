@@ -35,7 +35,6 @@ void rainSensorIsr()
   {
     rainSensorLastInterruptTime = millis();
     rainDetected = true;
-    rainCount++;
   }
 }
 
@@ -68,8 +67,15 @@ void weatherStationUpdate()
 {
   uint32_t count;
   uint32_t currentTime;
+  int entries;
+  int index;
   uint8_t inputValue;
+  static uint32_t lastRainUpdate;
   static uint32_t lastWindCount;
+  int maxValue;
+  int minValue;
+  int total;
+  double value;
 
   //Pulse the LED when rain is detected
   rxLED(rainDetected);
@@ -80,10 +86,12 @@ void weatherStationUpdate()
   //Clear the rain interrupt after a while
   inputValue = digitalRead(pin_RainSensor);
   if (rainDetected && inputValue && ((millis() - rainSensorLastInterruptTime) >= RAIN_TIMEOUT))
-{
+  {
+    //Update the rain count
+    rainCountTotal++;
+    rainCount[rainIndex]++;
     rainDetected = false;
-//systemPrintln(rainCount);
-}
+  }
 
   //Clear the wind interrupt after a while
   inputValue = digitalRead(pin_WindSensor);
@@ -92,6 +100,44 @@ void weatherStationUpdate()
     windDetected = false;
 //systemPrintln(windCount);
 }
+
+  //Update the rain amounts every minute
+  currentTime = millis();
+  if ((currentTime - lastRainUpdate) >= 60 * 1000)
+  {
+    lastRainUpdate = currentTime;
+
+    //Start the next entry
+    entries = sizeof(rainCount) / sizeof(rainCount[0]);
+    rainIndex = (rainIndex + 1) % entries;
+    rainCount[rainIndex] = 0;
+
+    //Locate the maximum and minimum values
+    maxValue = 0;
+    minValue = 255;
+    total = 0;
+    for (index = 0; index < entries; index++)
+    {
+      total += rainCount[index];
+      if (maxValue < rainCount[index])
+        maxValue = rainCount[index];
+      if (minValue > rainCount[index])
+        minValue = rainCount[index];
+    }
+    
+    //Compute the maximum rain fall
+    value = ((double)maxValue) * 0.010984252;
+    maxRainFall = (float)value;
+
+    //Compute the minimum rain fall
+    value = ((double)minValue) * 0.010984252;
+    minRainFall = (float)value;
+
+    //Compute the average rain fall
+    value = ((double)total) * 0.010984252 / ((double)entries);
+    aveRainFall = value;
+displayRainFall();
+  }
 
   //Compute the wind speed on a regular basis
   currentTime = millis();
@@ -109,3 +155,15 @@ systemPrint((float)windSpeedKmPerHr, 2);
 systemPrintln(" km/hr)");
   }
 }
+
+void displayRainFall()
+{
+  systemPrint("Rain (in/hr) Max: ");
+  systemPrint(maxRainFall, 2);
+  systemPrint(", Ave: ");
+  systemPrint(aveRainFall, 2);
+  systemPrint(", Min: ");
+  systemPrintln(minRainFall, 2);
+}
+
+
