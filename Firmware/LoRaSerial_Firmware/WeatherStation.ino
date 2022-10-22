@@ -109,7 +109,6 @@ void weatherStationUpdate()
     //Start the next entry
     entries = sizeof(rainCount) / sizeof(rainCount[0]);
     rainIndex = (rainIndex + 1) % entries;
-    rainCount[rainIndex] = 0;
 
     //Locate the maximum and minimum values
     maxValue = 0;
@@ -136,6 +135,9 @@ void weatherStationUpdate()
     value = ((double)total) * 0.010984252 / ((double)entries);
     aveRainFall = value;
 displayRainFall();
+
+    //Zero the next interval
+    rainCount[rainIndex] = 0;
   }
 
   //Update the wind amounts every second
@@ -146,7 +148,6 @@ displayRainFall();
     //Start the next entry
     entries = sizeof(windCount) / sizeof(windCount[0]);
     windIndex = (windIndex + 1) % entries;
-    windCount[windIndex] = 0;
 
     //Locate the maximum and minimum values
     maxValue = 0;
@@ -173,6 +174,9 @@ displayRainFall();
     value = ((double)total) * 1.49129 / ((double)entries);
     aveWindSpeed = value;
 displayWindSpeed();
+
+    //Zero the next interval
+    windCount[windIndex] = 0;
   }
 }
 
