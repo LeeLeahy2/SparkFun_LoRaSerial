@@ -77,7 +77,6 @@ void weatherStationUpdate()
   //Pulse the LED when wind is detected
   txLED(windDetected);
 
-/*
   //Clear the rain interrupt after a while
   inputValue = digitalRead(pin_RainSensor);
   if (rainDetected && inputValue && ((millis() - rainSensorLastInterruptTime) >= RAIN_TIMEOUT))
@@ -85,7 +84,6 @@ void weatherStationUpdate()
     rainDetected = false;
 //systemPrintln(rainCount);
 }
-*/
 
   //Clear the wind interrupt after a while
   inputValue = digitalRead(pin_WindSensor);
