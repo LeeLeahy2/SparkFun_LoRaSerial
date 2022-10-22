@@ -182,8 +182,7 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI26 - Display the total number of bad CRC frames");
 
         //Add user commands after this line
-        systemPrintln("  ATI97 - Display wind speed");
-        systemPrintln("  ATI98 - Display wind counter value");
+        systemPrintln("  ATI98 - Display wind gauge values");
         systemPrintln("  ATI99 - Display rain gauge values");
         break;
       case ('0'): //ATI0 - Show user settable parameters
@@ -370,16 +369,8 @@ bool commandAT(const char * commandString)
       case ('9'): //ATI99 - Display rain gauge values
         displayRainFall();
         break;
-      case ('8'): //ATI98 - Display wind counter value
-        systemPrint("Wind count: ");
-        systemPrintln(windCount);
-        break;
-      case ('7'): //ATI97 - Display wind speed
-        systemPrint("Wind speed: ");
-        systemPrint((float)windSpeedMiPerHr);
-        systemPrint(" mi/hr (");
-        systemPrint((float)windSpeedKmPerHr);
-        systemPrintln(" km/hr)");
+      case ('8'): //ATI98 - Display wind gauge values
+        displayWindSpeed();
         break;
     }
   }
