@@ -183,11 +183,11 @@ displayWindSpeed();
 void displayRainFall()
 {
   systemPrint("Rain (in/hr) Max: ");
-  systemPrint(maxRainFall, 2);
+  systemPrint(maxRainFall, 4);
   systemPrint(", Ave: ");
-  systemPrint(aveRainFall, 2);
+  systemPrint(aveRainFall, 4);
   systemPrint(", Min: ");
-  systemPrintln(minRainFall, 2);
+  systemPrintln(minRainFall, 4);
 }
 
 void displayWindSpeed()
