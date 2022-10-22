@@ -511,7 +511,9 @@ void setup()
 
   updateRTS(true); //Enable serial input
 
-  windSensorBegin(); //Enable the rain sensor input
+  //Enable the weather station sensors
+  rainSensorBegin();
+  windSensorBegin();
 
   systemPrintTimestamp();
   systemPrintln("LRS Setup Complete");

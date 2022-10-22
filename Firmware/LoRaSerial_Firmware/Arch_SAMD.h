@@ -63,7 +63,7 @@ void windSensorIsr();
 */
 
 const int pin_RainSensor = 30;
-const int pin_WindSensor = 30;
+const int pin_WindSensor = 0;
 
 void samdBeginBoard()
 {
