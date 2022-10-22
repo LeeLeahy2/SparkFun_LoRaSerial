@@ -184,7 +184,7 @@ bool commandAT(const char * commandString)
         //Add user commands after this line
         systemPrintln("  ATI97 - Display wind speed");
         systemPrintln("  ATI98 - Display wind counter value");
-        systemPrintln("  ATI99 - Display rain counter value");
+        systemPrintln("  ATI99 - Display rain gauge values");
         break;
       case ('0'): //ATI0 - Show user settable parameters
         displayParameters(0, true);
@@ -367,9 +367,8 @@ bool commandAT(const char * commandString)
     {
       default:
         return false;
-      case ('9'): //ATI99 - Display rain counter value
-        systemPrint("Rain count: ");
-        systemPrintln(rainCount);
+      case ('9'): //ATI99 - Display rain gauge values
+        displayRainFall();
         break;
       case ('8'): //ATI98 - Display wind counter value
         systemPrint("Wind count: ");
