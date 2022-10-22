@@ -59,19 +59,17 @@ void windSensorIsr()
   {
     windSensorLastInterruptTime = millis();
     windDetected = true;
-    windCount++;
   }
 }
 
 void weatherStationUpdate()
 {
-  uint32_t count;
   uint32_t currentTime;
   int entries;
   int index;
   uint8_t inputValue;
   static uint32_t lastRainUpdate;
-  static uint32_t lastWindCount;
+  static uint32_t lastWindUpdate;
   int maxValue;
   int minValue;
   int total;
@@ -96,10 +94,11 @@ void weatherStationUpdate()
   //Clear the wind interrupt after a while
   inputValue = digitalRead(pin_WindSensor);
   if (windDetected && inputValue && ((millis() - windSensorLastInterruptTime) >= WIND_TIMEOUT))
-{
+  {
+    windCountTotal++;
+    windCount[windIndex]++;
     windDetected = false;
-//systemPrintln(windCount);
-}
+  }
 
   //Update the rain amounts every minute
   currentTime = millis();
@@ -139,20 +138,41 @@ void weatherStationUpdate()
 displayRainFall();
   }
 
-  //Compute the wind speed on a regular basis
-  currentTime = millis();
-  if ((currentTime - lastPoll) >= POLL_INTERVAL)
+  //Update the wind amounts every second
+  if ((currentTime - lastWindUpdate) >= 1000)
   {
-    count = windCount;
-    windSpeedKmPerHr = (2.4 * 1000. * (windCount - lastWindCount)) / (currentTime - lastPoll);
-    windSpeedMiPerHr = windSpeedKmPerHr * 1.49129;
-    lastPoll = currentTime;
-    lastWindCount = count;
-systemPrint("Wind speed: ");
-systemPrint((float)windSpeedMiPerHr, 2);
-systemPrint(" mi/hr (");
-systemPrint((float)windSpeedKmPerHr, 2);
-systemPrintln(" km/hr)");
+    lastWindUpdate = currentTime;
+
+    //Start the next entry
+    entries = sizeof(windCount) / sizeof(windCount[0]);
+    windIndex = (windIndex + 1) % entries;
+    windCount[windIndex] = 0;
+
+    //Locate the maximum and minimum values
+    maxValue = 0;
+    minValue = 255;
+    total = 0;
+    for (index = 0; index < entries; index++)
+    {
+      total += windCount[index];
+      if (maxValue < windCount[index])
+        maxValue = windCount[index];
+      if (minValue > windCount[index])
+        minValue = windCount[index];
+    }
+    
+    //Compute the maximum wind gust
+    value = ((double)maxValue) * 1.49129;
+    maxWindSpeed = (float)value;
+
+    //Compute the minimum wind gust
+    value = ((double)minValue) * 1.49129;
+    minWindSpeed = (float)value;
+
+    //Compute the average wind speed
+    value = ((double)total) * 1.49129 / ((double)entries);
+    aveWindSpeed = value;
+displayWindSpeed();
   }
 }
 
@@ -166,4 +186,12 @@ void displayRainFall()
   systemPrintln(minRainFall, 2);
 }
 
-
+void displayWindSpeed()
+{
+  systemPrint("Wind Speed (mi/hr) Max: ");
+  systemPrint(maxWindSpeed, 2);
+  systemPrint(", Ave: ");
+  systemPrint(aveWindSpeed, 2);
+  systemPrint(", Min: ");
+  systemPrintln(minWindSpeed, 2);
+}
