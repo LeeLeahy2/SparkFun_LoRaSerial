@@ -10,6 +10,7 @@
 
 EXECUTABLES  = Client
 EXECUTABLES += Server
+EXECUTABLES += SprinklerServer
 EXECUTABLES += VcServerTest
 
 INCLUDES = settings.h
@@ -56,6 +57,9 @@ Client: Client.c $(COMMON_LIB)
 	$(CC) -o $@ $^
 
 Server: Server.c $(COMMON_LIB)
+	$(CC) -o $@ $^
+
+SprinklerServer: SprinklerServer.c
 	$(CC) -o $@ $^
 
 VcServerTest: VcServerTest.c $(COMMON_LIB)
