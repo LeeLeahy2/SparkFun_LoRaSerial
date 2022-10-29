@@ -122,7 +122,7 @@ void weatherStationUpdate()
       if (minValue > rainCount[index])
         minValue = rainCount[index];
     }
-    
+
     //Compute the maximum rain fall
     value = ((double)maxValue) * 0.010984252;
     maxRainFall = (float)value;
@@ -161,7 +161,7 @@ displayRainFall();
       if (minValue > windCount[index])
         minValue = windCount[index];
     }
-    
+
     //Compute the maximum wind gust
     value = ((double)maxValue) * 1.49129;
     maxWindSpeed = (float)value;
@@ -173,7 +173,6 @@ displayRainFall();
     //Compute the average wind speed
     value = ((double)total) * 1.49129 / ((double)entries);
     aveWindSpeed = value;
-displayWindSpeed();
 
     //Zero the next interval
     windCount[windIndex] = 0;
