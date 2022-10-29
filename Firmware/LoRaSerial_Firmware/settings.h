@@ -233,11 +233,12 @@ typedef struct _VC_MESSAGE_HEADER
 #define VC_BROADCAST        -1
 #define VC_UNASSIGNED       -2
 
+//Source and destinations reserved for the local radio
+#define VC_COMMAND          -3    //Command input
+
 //Source and destinations reserved for the local host
-#define VC_LINK_RESET       -3    //Force link reset
-#define VC_LINK_STATUS      -4    //Asynchronous link status output
-#define VC_COMMAND          -5    //Command input and command response
-#define VC_DEBUG            -6    //Debug input and output
+#define PC_COMMAND          -10    //Command input and command response
+#define PC_LINK_STATUS      -11   //Asynchronous link status output
 
 /*
 Host Interaction using Virtual-Circuits
@@ -503,3 +504,6 @@ typedef struct _ARCH_TABLE
   ARCH_SYSTEM_RESET systemReset;  //Reset the system
   ARCH_UNIQUE_ID uniqueID;        //Get the 128 bit unique ID value
 } ARCH_TABLE;
+
+//ASCII characters
+#define START_OF_HEADING      0x01      //From ASCII table

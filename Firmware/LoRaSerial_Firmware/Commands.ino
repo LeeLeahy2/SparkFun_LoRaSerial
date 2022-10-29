@@ -402,10 +402,24 @@ bool commandAT(const char * commandString)
         }
         break;
       case ('5'): //ATI95 - Display the total rain gauge count
+        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        {
+          systemWrite(START_OF_HEADING);  //Start byte
+          systemWrite(3 + 8 + 2);         //Length
+          systemWrite(PC_COMMAND);        //Destination
+          systemWrite(VC_COMMAND);        //Source
+        }
         systemPrint((int)rainCountTotal, HEX);
         systemPrintln();
         break;
       case ('4'): //ATI94 - Display the total wind gauge count
+        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        {
+          systemWrite(START_OF_HEADING);  //Start byte
+          systemWrite(3 + 8 + 2);         //Length
+          systemWrite(PC_COMMAND);        //Destination
+          systemWrite(VC_COMMAND);        //Source
+        }
         systemPrint((int)windCountTotal, HEX);
         systemPrintln();
         break;
