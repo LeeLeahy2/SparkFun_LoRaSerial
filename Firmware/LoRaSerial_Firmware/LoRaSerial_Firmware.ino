@@ -444,6 +444,7 @@ uint8_t *rxVcData;
 int8_t txDestVc;
 unsigned long vcAckTimer;
 VIRTUAL_CIRCUIT virtualCircuitList[MAX_VC];
+uint8_t operatingMode;
 
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
@@ -488,6 +489,7 @@ void setup()
   loadSettings(); //Load settings from EEPROM
 
   beginSerial(settings.serialSpeed);
+  operatingMode = settings.operatingMode;
 
   systemPrintTimestamp();
   systemPrintln("LRS");

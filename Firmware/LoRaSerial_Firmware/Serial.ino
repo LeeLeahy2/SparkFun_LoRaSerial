@@ -228,7 +228,7 @@ void updateSerial()
   rxLED(false); //Turn off LED
 
   //Process the serial data
-  if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+  if (operatingMode == MODE_VIRTUAL_CIRCUIT)
     vcProcessSerialInput();
   else
     processSerialInput();

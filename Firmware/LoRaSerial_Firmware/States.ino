@@ -86,9 +86,9 @@ void updateRadioState()
       if (settings.radioProtocolVersion >= 2)
       {
         //Start the V2 protocol
-        if (settings.operatingMode == MODE_POINT_TO_POINT)
+        if (operatingMode == MODE_POINT_TO_POINT)
           changeState(RADIO_P2P_LINK_DOWN);
-        else if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        else if (operatingMode == MODE_VIRTUAL_CIRCUIT)
         {
           if (settings.trainingServer)
             //Reserve the server's address (0)
@@ -1605,7 +1605,7 @@ void selectHeaderAndTrailerBytes()
   headerBytes = 0;
 
   //Add the netID to the header
-  if ((settings.operatingMode == MODE_POINT_TO_POINT) || settings.verifyRxNetID)
+  if ((operatingMode == MODE_POINT_TO_POINT) || settings.verifyRxNetID)
     headerBytes += 1;
 
   //Add the control byte to the header

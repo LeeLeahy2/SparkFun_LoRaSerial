@@ -676,7 +676,7 @@ PacketType rcvDatagram()
   */
 
   //Verify the netID if necessary
-  if ((settings.operatingMode == MODE_POINT_TO_POINT) || settings.verifyRxNetID)
+  if ((operatingMode == MODE_POINT_TO_POINT) || settings.verifyRxNetID)
   {
     receivedNetID = *rxData++;
     if (settings.debugReceive)
@@ -815,7 +815,7 @@ PacketType rcvDatagram()
 
   //Verify the packet number last so that the expected datagram or ACK number can be updated
   rxVcData = rxData;
-  if (settings.operatingMode == MODE_POINT_TO_POINT)
+  if (operatingMode == MODE_POINT_TO_POINT)
   {
     switch (datagramType)
     {
@@ -925,7 +925,7 @@ PacketType rcvDatagram()
   }
 
   //Verify the Virtual-Circuit length
-  else if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+  else if (operatingMode == MODE_VIRTUAL_CIRCUIT)
   {
     //Verify that the virtual circuit header is present
     if (rxDataBytes < 3)
@@ -1059,7 +1059,7 @@ PacketType rcvDatagram()
       case DATAGRAM_REMOTE_COMMAND:
       case DATAGRAM_REMOTE_COMMAND_RESPONSE:
       case DATAGRAM_HEARTBEAT:
-        if (settings.operatingMode == MODE_POINT_TO_POINT)
+        if (operatingMode == MODE_POINT_TO_POINT)
         {
           systemPrint(" (ACK #");
           systemPrint(ackNumber);
@@ -1102,7 +1102,7 @@ void transmitDatagram()
 
   //Parse the virtual circuit header
   vc = NULL;
-  if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+  if (operatingMode == MODE_VIRTUAL_CIRCUIT)
   {
     vcData = &outgoingPacket[headerBytes];
     vcLength = *vcData++;
@@ -1143,7 +1143,7 @@ void transmitDatagram()
       case DATAGRAM_REMOTE_COMMAND:
       case DATAGRAM_REMOTE_COMMAND_RESPONSE:
       case DATAGRAM_HEARTBEAT:
-        if (settings.operatingMode == MODE_POINT_TO_POINT)
+        if (operatingMode == MODE_POINT_TO_POINT)
         {
           systemPrint(" (ACK #");
           systemPrint(txControl.ackNumber);
@@ -1201,7 +1201,7 @@ void transmitDatagram()
   }
 
   //Add the netID if necessary
-  if ((settings.operatingMode == MODE_POINT_TO_POINT) || settings.verifyRxNetID)
+  if ((operatingMode == MODE_POINT_TO_POINT) || settings.verifyRxNetID)
   {
     *header++ = settings.netID;
 
@@ -1245,7 +1245,7 @@ void transmitDatagram()
   }
 
   //Verify the Virtual-Circuit length
-  if (settings.debugTransmit && (settings.operatingMode == MODE_VIRTUAL_CIRCUIT))
+  if (settings.debugTransmit && (operatingMode == MODE_VIRTUAL_CIRCUIT))
   {
     systemPrintTimestamp();
     systemPrint("    Length: ");
