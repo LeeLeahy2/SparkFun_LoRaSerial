@@ -1941,13 +1941,13 @@ void vcBreakLink(int8_t vcIndex)
   }
   linkFailures++;
 
-  //Display the link failure
-  if (settings.printLinkUpDown)
-  {
-    systemPrint("---------  Link ");
-    systemPrint(vcIndex);
-    systemPrintln(" Down  ---------");
-  }
+  //Send the link status change
+  sprintf(tempBuffer, "---------  Link %d Down  ---------", vcIndex);
+  systemWrite(START_OF_HEADING);        //Start byte
+  systemWrite(3 + strlen(tempBuffer));  //Length
+  systemWrite(PC_LINK_STATUS);          //Destination
+  systemWrite(myVc);                    //Source
+  systemPrint(tempBuffer);
 
   //Stop the transmit timer
   transmitTimer = 0;
@@ -1974,12 +1974,13 @@ int8_t vcIdToAddressByte(int8_t srcAddr, uint8_t * id)
     {
       if (!vc->linkUp)
       {
-        if (settings.printLinkUpDown)
-        {
-          systemPrint("==========  Link ");
-          systemPrint(srcAddr);
-          systemPrintln(" up  ==========");
-        }
+        //Send the link status change
+        sprintf(tempBuffer, "==========  Link %d up  ==========\r\n", srcAddr);
+        systemWrite(START_OF_HEADING);        //Start byte
+        systemWrite(3 + strlen(tempBuffer));  //Length
+        systemWrite(PC_LINK_STATUS);          //Destination
+        systemWrite(myVc);                    //Source
+        systemPrint(tempBuffer);
       }
       vc->linkUp = true;
       vc->lastHeartbeatMillis = millis();
@@ -2035,12 +2036,14 @@ int8_t vcIdToAddressByte(int8_t srcAddr, uint8_t * id)
   vc->linkUp = true;
   vc->lastHeartbeatMillis = millis();
   memcpy(&vc->uniqueId, id, UNIQUE_ID_BYTES);
-  if (settings.printLinkUpDown)
-  {
-    systemPrint("==========  Link ");
-    systemPrint(index);
-    systemPrintln(" up  ==========");
-  }
+
+  //Send the link status change
+  sprintf(tempBuffer, "==========  Link %d up  ==========\r\n", index);
+  systemWrite(START_OF_HEADING);        //Start byte
+  systemWrite(3 + strlen(tempBuffer));  //Length
+  systemWrite(PC_LINK_STATUS);          //Destination
+  systemWrite(myVc);                    //Source
+  systemPrint(tempBuffer);
 
   //Returned the assigned address
   return index;
