@@ -9,6 +9,7 @@
 ##########
 
 EXECUTABLES  = Client
+EXECUTABLES += Command_Test
 EXECUTABLES += Server
 EXECUTABLES += SprinklerServer
 EXECUTABLES += VcServerTest
@@ -54,6 +55,9 @@ $(COMMON_LIB): $(LIB_OBJS)
 ##########
 
 Client: Client.c $(COMMON_LIB)
+	$(CC) -o $@ $^
+
+Command_Test: Command_Test.c $(COMMON_LIB)
 	$(CC) -o $@ $^
 
 Server: Server.c $(COMMON_LIB)
