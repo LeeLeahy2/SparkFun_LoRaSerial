@@ -237,7 +237,7 @@ typedef struct _VC_MESSAGE_HEADER
 #define VC_COMMAND          -3    //Command input
 
 //Source and destinations reserved for the local host
-#define PC_COMMAND          -10    //Command input and command response
+#define PC_COMMAND          -10   //Command input and command response
 #define PC_LINK_STATUS      -11   //Asynchronous link status output
 
 /*
