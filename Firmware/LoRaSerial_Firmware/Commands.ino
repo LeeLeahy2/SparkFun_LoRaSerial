@@ -400,7 +400,7 @@ bool commandAT(const char * commandString)
         }
         break;
       case ('5'): //ATI95 - Display the total rain gauge count
-        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        if (operatingMode == MODE_VIRTUAL_CIRCUIT)
         {
           systemWrite(START_OF_HEADING);  //Start byte
           systemWrite(3 + 8 + 2);         //Length
@@ -411,7 +411,7 @@ bool commandAT(const char * commandString)
         systemPrintln();
         break;
       case ('4'): //ATI94 - Display the total wind gauge count
-        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        if (operatingMode == MODE_VIRTUAL_CIRCUIT)
         {
           systemWrite(START_OF_HEADING);  //Start byte
           systemWrite(3 + 8 + 2);         //Length

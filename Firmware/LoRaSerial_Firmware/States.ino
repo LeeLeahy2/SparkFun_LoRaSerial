@@ -1758,7 +1758,7 @@ void selectHeaderAndTrailerBytes()
   headerBytes = 0;
 
   //Add the netID to the header
-  if ((settings.operatingMode == MODE_POINT_TO_POINT) || settings.verifyRxNetID)
+  if ((operatingMode == MODE_POINT_TO_POINT) || settings.verifyRxNetID)
     headerBytes += 1;
 
   //Add the control byte to the header
