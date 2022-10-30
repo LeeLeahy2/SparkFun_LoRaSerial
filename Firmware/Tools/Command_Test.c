@@ -363,15 +363,13 @@ int stdinToRadio()
   else
   {
     //Adjust bytesRead to account for the VC header
-printf("bytesRead: %d\n", bytesRead);
     vcData[0] = START_OF_HEADING;
     vcData[1] = bytesRead + 3;
-    vcData[2] = remoteVcAddr;
-    vcData[3] = myVcAddr;
+//    vcData[2] = remoteVcAddr;
+//    vcData[3] = myVcAddr;
+    vcData[2] = VC_COMMAND;
+    vcData[3] = PC_COMMAND;
     bytesRead += 1 + 3;
-vcData[2] = VC_COMMAND;
-vcData[3] = PC_COMMAND;
-dumpBuffer(inputBuffer, bytesRead);
 
     //Send this data over the VC
     bytesSent = 0;
@@ -384,8 +382,6 @@ dumpBuffer(inputBuffer, bytesRead);
         bytesToSend = MAX_MESSAGE_SIZE;
 
       //Send the data
-printf("Sending:\n");
-dumpBuffer(&vcData[bytesSent], bytesRead - bytesSent);
       bytesToSend = write(radio, &vcData[bytesSent], bytesRead - bytesSent);
       if (bytesToSend <= 0)
       {
