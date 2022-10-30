@@ -66,12 +66,15 @@ void weatherStationUpdate()
 {
   uint32_t currentTime;
   int entries;
+  bool forceUpdate;
   int index;
   uint8_t inputValue;
   static uint32_t lastRainUpdate;
   static uint32_t lastWindUpdate;
   int maxValue;
   int minValue;
+  static uint32_t previousRainCount;
+  static uint32_t previousWindCount;
   int total;
   double value;
 
@@ -82,6 +85,7 @@ void weatherStationUpdate()
   txLED(windDetected);
 
   //Clear the rain interrupt after a while
+  forceUpdate = false;
   inputValue = digitalRead(pin_RainSensor);
   if (rainDetected && inputValue && ((millis() - rainSensorLastInterruptTime) >= RAIN_TIMEOUT))
   {
@@ -105,6 +109,7 @@ void weatherStationUpdate()
   if ((currentTime - lastRainUpdate) >= 60 * 1000)
   {
     lastRainUpdate = currentTime;
+    forceUpdate = true;
 
     //Start the next entry
     entries = sizeof(rainCount) / sizeof(rainCount[0]);
@@ -134,7 +139,6 @@ void weatherStationUpdate()
     //Compute the average rain fall
     value = ((double)total) * 0.010984252 / ((double)entries);
     aveRainFall = value;
-displayRainFall();
 
     //Zero the next interval
     rainCount[rainIndex] = 0;
@@ -176,6 +180,32 @@ displayRainFall();
 
     //Zero the next interval
     windCount[windIndex] = 0;
+  }
+
+  //Check for rain detected
+  if (forceUpdate || (previousRainCount != rainCountTotal))
+  {
+    //Send a rain status message
+    previousRainCount = rainCountTotal;
+    sprintf(tempBuffer, "R%08x\r\n", rainCountTotal);
+    systemWrite(START_OF_HEADING);        //Start byte
+    systemWrite(3 + strlen(tempBuffer));  //Length
+    systemWrite(PC_RAIN_STATUS);          //Destination
+    systemWrite(myVc);                    //Source
+    systemPrint(tempBuffer);
+  }
+
+  //Check for wind detected
+  if (forceUpdate || (previousWindCount != windCountTotal))
+  {
+    //Send a wind status message
+    previousWindCount = windCountTotal;
+    sprintf(tempBuffer, "W%08x\r\n", windCountTotal);
+    systemWrite(START_OF_HEADING);        //Start byte
+    systemWrite(3 + strlen(tempBuffer));  //Length
+    systemWrite(PC_WIND_STATUS);          //Destination
+    systemWrite(myVc);                    //Source
+    systemPrint(tempBuffer);
   }
 }
 
