@@ -452,6 +452,7 @@ bool vcSerialMessageReceived()
 
 void vcProcessSerialInput()
 {
+  char * cmd;
   uint8_t data;
   uint16_t dataBytes;
   int8_t vcDest;
@@ -469,34 +470,30 @@ void vcProcessSerialInput()
 
     //Skip any garbage in the input stream
     data = serialReceiveBuffer[rxTail++];
-    if (serialReceiveBuffer[rxTail] != START_OF_HEADING)
+    rxTail %= sizeof(radioTxBuffer);
+    if (data != START_OF_HEADING)
     {
       //Discard this data byte
-      rxTail %= sizeof(radioTxBuffer);
       dataBytes = availableRXBytes();
       continue;
     }
 
     //Get the virtual circuit header
-    length = serialReceiveBuffer[(rxTail + 1) % sizeof(radioTxBuffer)];
+    length = serialReceiveBuffer[rxTail];
     if (length <= 3)
     {
       //Invalid message length, discard the START_OF_HEADING
-      rxTail %= sizeof(radioTxBuffer);
       dataBytes = availableRXBytes();
       continue;
     }
 
     //Skip if there is not enough data
-    if (dataBytes < (length + 1))
+    if (dataBytes < length)
       break;
 
     //Get the source and destination virtual circuits
-    vcDest = serialReceiveBuffer[(rxTail + 2) % sizeof(radioTxBuffer)];
-    vcSrc = serialReceiveBuffer[(rxTail + 3) % sizeof(radioTxBuffer)];
-
-    //Skip over the START_OF_HEADING
-    rxTail = (rxTail + 1) % sizeof(radioTxBuffer);
+    vcDest = serialReceiveBuffer[(rxTail + 1) % sizeof(radioTxBuffer)];
+    vcSrc = serialReceiveBuffer[(rxTail + 2) % sizeof(radioTxBuffer)];
 
     //Process this message
     switch (vcDest)
@@ -543,19 +540,15 @@ void vcProcessSerialInput()
         rxTail = (rxTail + 3) % sizeof(radioTxBuffer);
 
         //Move this message into the command buffer
-        dataBytes = (sizeof(serialReceiveBuffer) - rxTail);
-        if (length > dataBytes)
+        for (cmd = commandBuffer; length > 0; length--)
         {
-          memcpy(commandBuffer, &serialReceiveBuffer[rxTail], dataBytes);
-          length -= dataBytes;
-          memcpy(&commandBuffer[dataBytes], serialReceiveBuffer, length);
-          rxTail = length;
+          *cmd++ = toupper(serialReceiveBuffer[rxTail++]);
+          rxTail %= sizeof(serialReceiveBuffer);
         }
-        else
-        {
-          memcpy(commandBuffer, &serialReceiveBuffer[rxTail], length);
-          rxTail = (rxTail + length) % sizeof(serialReceiveBuffer);
-        }
+        commandLength = cmd - commandBuffer;
+
+        //Process this command
+        checkCommand();
         break;
     }
 
