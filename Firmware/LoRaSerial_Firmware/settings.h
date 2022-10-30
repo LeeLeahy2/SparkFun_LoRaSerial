@@ -240,6 +240,9 @@ typedef struct _VC_MESSAGE_HEADER
 #define PC_COMMAND          -10   //Command input and command response
 #define PC_LINK_STATUS      -11   //Asynchronous link status output
 
+#define PC_RAIN_STATUS      MAX_VC
+#define PC_WIND_STATUS      (PC_RAIN_STATUS + 1)
+
 /*
 Host Interaction using Virtual-Circuits
 
