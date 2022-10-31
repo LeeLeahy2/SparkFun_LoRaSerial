@@ -245,8 +245,8 @@ int enterCommandMode(int radio)
     }
     if (bytesWritten != length)
     {
-        fprintf(stderr, "ERROR - Write failed, tried to write %ld bytes, only wrote %ld bytes\n",
-                length, bytesWritten);
+        fprintf(stderr, "ERROR - Write failed, tried to write %d bytes, only wrote %d bytes\n",
+                (uint32_t)length, (uint32_t)bytesWritten);
         return 10;
     }
 
@@ -329,8 +329,8 @@ int downloadSchedule(int radio)
             }
             if (bytesWritten != length)
             {
-                fprintf(stderr, "ERROR - Command write failed, tried to write %ld bytes, only wrote %ld bytes\n",
-                        length, bytesWritten);
+                fprintf(stderr, "ERROR - Command write failed, tried to write %d bytes, only wrote %d bytes\n",
+                        (uint32_t)length, (uint32_t)bytesWritten);
                 return 40;
             }
 
