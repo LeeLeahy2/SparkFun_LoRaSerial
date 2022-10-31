@@ -1,0 +1,30 @@
++++
+
+# Start with factory settings
+at&f
+
+# netID = 'M'
+ats2=4b
+
+# operatingMode = virtual-circuit
+ats3=2
+
+# radioBroadcastPower_dbm = full power
+ats7=30
+
+# enableCRC16
+ats49=1
+
+# alternateLedUsage
+ats60=1
+
+# Server
+ats51=1
+
+# Save the settings
+at&w
+
+# Reset and reboot
+atz
+
+
