@@ -1,133 +1,314 @@
-#include "settings.h"
+/**********************************************************************
+* Copyright 2022 Lee Leahy (lpleahyjr@gmail.com)
+* All rights reserved
+*
+* SprinklerServer.c
+*
+* Program to log data from the SparkFun weather station.
+**********************************************************************/
 
-#define BUFFER_SIZE           2048
-#define MAX_MESSAGE_SIZE      32
-#define STDIN                 0
-#define STDOUT                1
-#define START_OF_HEADING      0x01      //From ASCII table
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <termios.h>
+#include <time.h>
+#include <unistd.h>
 
+#define START_OF_HEADING        1
+
+#define UNKNOWN_VALUE           -1
+
+#define RADIO                   "/dev/ttyACM0"
+#define BAUD_RATE               B57600
+
+#define ENTER_COMMAND_MODE      "+++\r"
+#define OK_RESPONSE             "OK"
+#define ERROR_RESPONSE          "ERROR"
+#define READ_TIMEOUT            250     //Milliseconds
+
+#define INPUT_BUFFER_SIZE       128
+#define OUTPUT_BUFFER_SIZE      4096
+
+#define STDIN                   0
+#define STDOUT                  1
+#define STDERR                  2
+
+#define MAX_MESSAGE_SIZE      128
+
+//Virtual-Circuit source and destination index values
+#define MAX_VC              8
+#define VC_SERVER           0
+#define VC_BROADCAST        -1
+#define VC_UNASSIGNED       -2
+
+//Source and destinations reserved for the local radio
+#define VC_COMMAND          -3    //Command input
+
+//Source and destinations reserved for the local host
+#define PC_COMMAND          -10   //Command input and command response
+#define PC_LINK_STATUS      -11   //Asynchronous link status output
+
+#define PC_RAIN_STATUS      MAX_VC
+#define PC_WIND_STATUS      (PC_RAIN_STATUS + 1)
+
+uint8_t inputBuffer[1 + 3 + INPUT_BUFFER_SIZE];
+uint8_t outputBuffer[OUTPUT_BUFFER_SIZE];
+int myVcAddr;
+int remoteVcAddr;
+int radio;
+fd_set readfds;
 struct tm * timeCurrent;
-uint8_t inputBuffer[BUFFER_SIZE + 3];
-uint8_t outputBuffer[BUFFER_SIZE + 3];
-uint8_t tempBuffer[60 * 60];
+struct tm timePrevious;
+time_t now;
 
-int radioToVc()
+char responseBuffer[4096];
+uint32_t rainCount;
+uint32_t previousRainCount;
+uint32_t windCount;
+uint32_t previousWindCount;
+bool gotFirstRainValue;
+bool gotFirstWindValue;
+
+int rainFile;
+int windFile;
+
+int8_t unknownData[60 * 60 * 24];
+
+void dumpBuffer(uint8_t * data, int length)
+{
+  char byte;
+  int bytes;
+  uint8_t * dataEnd;
+  uint8_t * dataStart;
+  const int displayWidth = 16;
+  int index;
+
+  dataStart = data;
+  dataEnd = &data[length];
+  while (data < dataEnd)
+  {
+    // Display the offset
+    printf("    0x%02x: ", (unsigned int)(data - dataStart));
+
+    // Determine the number of bytes to display
+    bytes = dataEnd - data;
+    if (bytes > displayWidth)
+      bytes = displayWidth;
+
+    // Display the data bytes in hex
+    for (index = 0; index < bytes; index++)
+      printf(" %02x", *data++);
+
+    // Space over to the ASCII display
+    for (; index < displayWidth; index++)
+      printf("   ");
+    printf("  ");
+
+    // Display the ASCII bytes
+    data -= bytes;
+    for (index = 0; index < bytes; index++) {
+      byte = *data++;
+      printf("%c", ((byte < ' ') || (byte >= 0x7f)) ? '.' : byte);
+    }
+    printf("\n");
+  }
+}
+
+int stdinToRadio()
 {
   int bytesRead;
   int bytesSent;
   int bytesToSend;
-  int dataBytes;
-  int8_t destAddr;
-  uint8_t length;
   int maxfds;
   int status;
-  int8_t srcAddr;
   struct timeval timeout;
   uint8_t * vcData;
 
-  status = 0;
-  do
+  //Read the console input data into the local buffer.
+  vcData = inputBuffer;
+  bytesRead = read(STDIN, &inputBuffer[1 + 3], INPUT_BUFFER_SIZE);
+  if (bytesRead < 0)
   {
-    //Display any debug data on the console
-    while (1)
+    perror("ERROR: Read from stdin failed!");
+    status = bytesRead;
+  }
+  else
+  {
+    //Adjust bytesRead to account for the VC header
+    vcData[0] = START_OF_HEADING;
+    vcData[1] = bytesRead + 3;
+//    vcData[2] = remoteVcAddr;
+//    vcData[3] = myVcAddr;
+    vcData[2] = VC_COMMAND;
+    vcData[3] = PC_COMMAND;
+    bytesRead += 1 + 3;
+
+    //Send this data over the VC
+    bytesSent = 0;
+    status = 0;
+    while (bytesSent < bytesRead)
     {
-      bytesRead = read(tty, outputBuffer, 1);
-      if (bytesRead < 0)
+      //Break up the data if necessary
+      bytesToSend = bytesRead - bytesSent;
+      if (bytesToSend > MAX_MESSAGE_SIZE)
+        bytesToSend = MAX_MESSAGE_SIZE;
+
+      //Send the data
+      bytesToSend = write(radio, &vcData[bytesSent], bytesRead - bytesSent);
+      if (bytesToSend <= 0)
       {
-        perror("ERROR: Read from radio failed!");
-        status = bytesRead;
-        break;
-      }
-      if (outputBuffer[0] == START_OF_HEADING)
-        break;
-      printf("%c", outputBuffer[0]);
-    }
-
-    //Read the virtual circuit header into the local buffer.
-    vcData = outputBuffer;
-    bytesRead = sizeof(outputBuffer);
-    bytesRead = read(tty, outputBuffer, bytesRead);
-    if (bytesRead < 0)
-    {
-      perror("ERROR: Read from radio failed!");
-      status = bytesRead;
-      break;
-    }
-
-    //Display the VC header
-    length = vcData[0];
-    destAddr = vcData[1];
-    srcAddr = vcData[2];
-    printf("length: %d\n", length);
-    printf("destAddr: %d\n", destAddr);
-    printf("srcAddr: %d\n", srcAddr);
-
-    //Read the message
-    bytesRead = 0;
-    vcData = outputBuffer;
-    while (bytesRead < length)
-    {
-      dataBytes = read(STDIN, &outputBuffer[bytesRead], length - bytesRead);
-      if (dataBytes < 0)
-      {
-        perror("ERROR: Read from radio failed!");
+        perror("ERROR: Write to radio failed!");
         status = errno;
         break;
       }
-    }
 
-    //Dispatch this message
-    switch (destAddr)
-    {
-    default:
-      break;
+      //Account for the bytes written
+      bytesSent += bytesToSend;
     }
-  } while (0);
+  }
   return status;
 }
 
-int addUnknownBytes(int file)
+int radioToStdout()
 {
-  size_t bytesToWrite;
-  size_t bytesWritten;
-  size_t dataBytes;
-  size_t fileSize;
-  time_t now;
-  int status;
+  int bytesRead;
+  int bytesWritten;
+  uint32_t count;
+  uint8_t * data;
+  uint8_t * dataEnd;
+  uint8_t * dataStart;
+  uint8_t vcDest;
+  int length;
 
-  status = 0;
-  fileSize = lseek(file, 0, SEEK_END);
-  now = time(NULL);
-  timeCurrent = localtime(&now);
-  bytesToWrite = (((timeCurrent->tm_hour * 60) + timeCurrent->tm_min) * 60)
-               + timeCurrent->tm_sec + 1;
-  bytesToWrite -= fileSize;
+  //Read the virtual circuit header into the local buffer.
+  bytesRead = read(radio, outputBuffer, OUTPUT_BUFFER_SIZE);
+  if (bytesRead <= 0)
+  {
+    perror("ERROR: Read from radio failed!");
+    return errno;
+  }
+
+  dataStart = outputBuffer;
+  dataEnd = &dataStart[bytesRead];
   do
   {
-    dataBytes = bytesToWrite;
-    if (dataBytes <= 0)
-      break;
-    if (dataBytes > sizeof(tempBuffer))
-      dataBytes = sizeof(tempBuffer);
-    bytesWritten = write(file, tempBuffer, dataBytes);
-    if (bytesWritten < dataBytes)
+    //Locate the start of the virtual circuit data
+    data = dataStart;
+    while ((data < dataEnd) && (*data != START_OF_HEADING))
+      data++;
+
+    //Just print any non-virtual-circuit data
+    length = data - dataStart;
+    if (length)
     {
-      perror("ERROR:Failed to write to rain file!");
-      status = errno;
-      break;
+      bytesWritten = write(STDOUT, dataStart, length);
+      if (bytesWritten != length)
+      {
+        perror("ERROR: Failed to write non-VC data");
+        return errno;
+      }
     }
-    bytesToWrite -= dataBytes;
-  } while (bytesToWrite > 0);
-  return status;
+    dataStart = &data[1];
+
+    if (data < dataEnd)
+    {
+      //Move the message to the beginning of the buffer
+      length = dataEnd - dataStart;
+      memcpy(outputBuffer, dataStart, length);
+      data = outputBuffer;
+      dataStart = data;
+
+      //Make sure that we have the length byte
+      if (!length)
+      {
+        dataStart = &data[length];
+        bytesRead = read(radio, dataStart, 1);
+        if (bytesRead <= 0)
+        {
+          perror("ERROR: Read from radio failed!");
+          return errno;
+        }
+        dataStart++;
+        length = 1;
+      }
+
+      //Determine if more data is necessary
+      if (*data > length)
+      {
+        dataEnd = &data[*data];
+        dataStart = &data[length];
+
+        //Read in the rest of the message
+        bytesRead = 0;
+        while (dataEnd > dataStart)
+        {
+          length = read(radio, dataStart, dataEnd - dataStart);
+          if (length <= 0)
+          {
+            perror("ERROR: Read from radio failed!");
+            return errno;
+          }
+          dataStart += length;
+        }
+      }
+      dataStart = data;
+      dataEnd = &data[length];
+
+      //Process this message
+      length = *data;
+      if (length > 3)
+      {
+        vcDest = data[1];
+        if (vcDest == PC_RAIN_STATUS)
+        {
+          if (sscanf((char *)&outputBuffer[3], "R%08x\r\n", &count) != 1)
+          {
+            fprintf(stderr, "ERROR: Failed to parse rain data!\r\n");
+            return -1;
+          }
+          rainCount = count;
+          if (!gotFirstRainValue)
+            previousRainCount = rainCount;
+          gotFirstRainValue = true;
+        }
+        if (vcDest == PC_WIND_STATUS)
+        {
+          if (sscanf((char *)&outputBuffer[3], "W%08x\r\n", &count) != 1)
+          {
+            fprintf(stderr, "ERROR: Failed to parse rain data!\r\n");
+            return -1;
+          }
+          windCount = count;
+          if (!gotFirstWindValue)
+            previousWindCount = windCount;
+          gotFirstWindValue = true;
+        }
+      }
+      dataStart += length;
+    }
+  } while (dataStart < dataEnd);
+  return 0;
 }
 
 int openSensorFile(const char * sensorName)
 {
   int file;
-  char fileName[64];
+  char fileName[128];
 
   //Get the file name
-  sprintf(fileName, "%s_%04d-%02d-%02d.txt", sensorName, timeCurrent->tm_year + 1900,
+  sprintf(fileName, "/var/www/html/WeatherData/%s_%04d-%02d-%02d.txt", sensorName, timeCurrent->tm_year + 1900,
           timeCurrent->tm_mon + 1, timeCurrent->tm_mday);
   file = open(fileName, O_CREAT | O_RDWR | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   if (file < 0)
@@ -135,41 +316,88 @@ int openSensorFile(const char * sensorName)
   return file;
 }
 
-int
-main (
-  int argc,
-  char ** argv
-)
+int fillSensorFiles()
 {
-  int bytesToWrite;
-  int fileSize;
-  bool handleTimeout;
-  int maxfds;
-  time_t now;
-  int rainFile;
-  int status;
-  struct timeval timeout;
-  struct tm timePrevious;
-  uint8_t * vcData;
-  int windFile;
+  int bytesWritten;
+  int length;
 
-  status = 0;
-  rainFile = -1;
-  windFile = -1;
-  do
+  //Get the current time
+  now = time(NULL);
+  timeCurrent = localtime(&now);
+  timePrevious = *timeCurrent;
+
+  //Determine the amount of unknown data
+  length = timeCurrent->tm_hour;
+  length = (length * 60) + timeCurrent->tm_min;
+  length = (length * 60) + timeCurrent->tm_sec;
+
+  //Write the unknowns to the file
+  bytesWritten = write(rainFile, unknownData, length);
+  if (bytesWritten != length)
   {
-    //Display the help text if necessary
-    if (argc != 2)
+    perror("ERROR: Failed writing unknowns to rain file");
+    return errno;
+  }
+  bytesWritten = write(windFile, unknownData, length);
+  if (bytesWritten != length)
+  {
+    perror("ERROR: Failed writing unknowns to wind file");
+    return errno;
+  }
+  return 0;
+}
+
+int main(int argc, char **argv)
+{
+    int bytesWritten;
+    fd_set currentfds;
+    int8_t deltaCount;
+    int maxfds;
+    int numfds;
+    int status;
+    struct termios tty;
+    struct timeval timeout;
+
+    //Wait for the radio
+    printf("Waiting for the radio...\n");
+    maxfds = STDIN;
+    do
     {
-      printf("%s   terminal\n", argv[0]);
-      printf("\n");
-      printf("terminal - Name or path to the terminal device for the radio\n");
-      status = -1;
-      break;
+        radio = open(RADIO, O_RDWR | O_NOCTTY);
+
+        //Give the radio some time to initialize
+        sleep(1);
+    }
+    while (radio < 0);
+
+    printf("Waiting for VC data...\n");
+    if (maxfds < radio)
+      maxfds = radio;
+
+    //Get the terminal characteristics
+    if (tcgetattr(radio, &tty) < 0)
+    {
+        perror("ERROR: Failed to get the terminal characteristics");
+        return 1;
     }
 
-    //Initialize the buffer of unknown bytes
-    memset(tempBuffer, -1, sizeof(tempBuffer));
+    cfmakeraw(&tty);
+
+    //Set the baudrate for the terminal
+    if (cfsetspeed(&tty, BAUD_RATE))
+    {
+        perror("ERROR: Failed to set the baudrate");
+        return 2;
+    }
+
+    //Set the proper baud rate and characteristics for the radio
+    if (tcsetattr(radio, TCSANOW, &tty) < 0)
+    {
+        perror("ERROR: Failed to set the terminal characteristics");
+        return 3;
+    }
+
+    memset(unknownData, UNKNOWN_VALUE, sizeof(unknownData));
 
     //Get the current time
     now = time(NULL);
@@ -178,60 +406,54 @@ main (
     //Open the rain file
     rainFile = openSensorFile("Rain");
     if (rainFile < 0)
-      break;
+    {
+      perror("ERROR: Failed to open the rain file!");
+      return errno;
+    }
 
     //Open the wind file
     windFile = openSensorFile("Wind");
     if (windFile < 0)
-      break;
-
-    //Add unknown values to the files
-    do
     {
-      timePrevious = *timeCurrent;
-      status = addUnknownBytes(rainFile);
-      if (status)
-        break;
-      addUnknownBytes(windFile);
-      if (status)
-        break;
-    } while (memcmp(&timePrevious, timeCurrent, sizeof(timePrevious)) != 0);
-    if (status)
-      break;
-
-    maxfds = STDIN;
-#if 0
-    //Open the terminal
-    status = openTty(argv[1]);
-    if (status)
-    {
-      perror("ERROR: Failed to open the terminal!");
-      break;
+      perror("ERROR: Failed to open the wind file!");
+      return errno;
     }
-    if (maxfds < tty)
-      maxfds = tty;
-#endif  //0
+
+    //Fill the files with unknown values
+    status = fillSensorFiles();
+    if (status)
+      return status;
 
     //Initialize the fd_sets
-    FD_ZERO(&exceptfds);
     FD_ZERO(&readfds);
-    FD_ZERO(&writefds);
+    FD_SET(STDIN, &readfds);
+    FD_SET(radio, &readfds);
 
-//    handleTimeout = false;
-    memset(&timeout, 0, sizeof(timeout));
+    //Set the timeout
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 50 * 1000;
     while (1)
     {
-      //Set the timeout
-      timeout.tv_sec = 0;
-      timeout.tv_usec = 1000;
-
       //Wait for receive data or timeout
-      FD_SET(STDIN, &readfds);
-//      FD_SET(tty, &readfds);
-      status = select(maxfds + 1, &readfds, &writefds, &exceptfds, &timeout);
+      memcpy((void *)&currentfds, (void *)&readfds, sizeof(readfds));
+      numfds = select(maxfds + 1, &currentfds, NULL, NULL, &timeout);
+      if (numfds < 0)
+      {
+        perror("ERROR: select call failed!");
+        status = errno;
+        break;
+      }
 
-/*
-      if (FD_ISSET(tty, &readfds))
+      //Determine if console input is available
+      if (FD_ISSET(STDIN, &currentfds))
+      {
+        //Send the console input to the radio
+        status = stdinToRadio();
+        if (status)
+          break;
+      }
+
+      if (FD_ISSET(radio, &currentfds))
       {
         //Write the radio data to console output
         status = radioToStdout();
@@ -239,57 +461,76 @@ main (
           break;
       }
 
-      //Timeout
-      else if (handleTimeout)
-*/
+      //Update the files every second
+      now = time(NULL);
+      timeCurrent = localtime(&now);
+      if (memcmp(&timePrevious, timeCurrent, sizeof(timePrevious)) != 0)
       {
-        now = time(NULL);
-        timeCurrent = localtime(&now);
-        if (memcmp(&timePrevious, timeCurrent, sizeof(timePrevious)) != 0)
+        timePrevious = *timeCurrent;
+
+        //Open the files if necessary
+        if (rainFile < 0)
         {
-          timePrevious = *timeCurrent;
-
-          //Open the files if necessary
+          rainFile = openSensorFile("Rain");
           if (rainFile < 0)
-          {
-            rainFile = openSensorFile("Rain");
-            if (rainFile < 0)
-              break;
-          }
+            break;
+        }
 
-            //Open the wind file
+          //Open the wind file
+        if (windFile < 0)
+        {
+          windFile = openSensorFile("Wind");
           if (windFile < 0)
-          {
-            windFile = openSensorFile("Wind");
-            if (windFile < 0)
-              break;
-          }
+            break;
+        }
 
-          //Get the weather sensor values
-printf("Read sensor\n");
+        //Get the rain sensor value
+        deltaCount = rainCount - previousRainCount;
+        if (!gotFirstRainValue)
+          deltaCount = UNKNOWN_VALUE;
+        previousRainCount = rainCount;
+        bytesWritten = write(rainFile, &deltaCount, sizeof(deltaCount));
+        if (bytesWritten != sizeof(deltaCount))
+        {
+          perror("ERROR: Write to rain file failed!");
+          status = errno;
+          break;
+        }
 
-          //Write the values to the current file
+        //Get the wind sensor value
+        deltaCount = windCount - previousWindCount;
+        if (!gotFirstWindValue)
+          deltaCount = UNKNOWN_VALUE;
+        previousWindCount = windCount;
+        bytesWritten = write(windFile, &deltaCount, sizeof(deltaCount));
+        if (bytesWritten != sizeof(deltaCount))
+        {
+          perror("ERROR: Write to wind file failed!");
+          status = errno;
+          break;
+        }
 
-          //Check for a new day
-          if ((timeCurrent->tm_hour == 23) && (timeCurrent->tm_min == 59)
-            && (timeCurrent->tm_sec == 59))
-          {
-            //Close the current files
-            close(windFile);
-            windFile = -1;
-            close(rainFile);
-            rainFile = -1;
-          }
+        //Check for a new day
+        if ((timeCurrent->tm_hour == 23) && (timeCurrent->tm_min == 59)
+          && (timeCurrent->tm_sec == 59))
+        {
+          //Close the current files
+          close(windFile);
+          windFile = -1;
+          close(rainFile);
+          rainFile = -1;
         }
       }
     }
-  } while (0);
 
-  //Done with the files
-  if (windFile >= 0)
-    close(windFile);
-  if (rainFile >= 0)
-    close(rainFile);
+    //Close the sensor files
+    if (windFile)
+      close(windFile);
+    if (rainFile)
+      close(rainFile);
 
-  return status;
+    //Done with the radio
+    close(radio);
+    radio = -1;
+    return status;
 }
