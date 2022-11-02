@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <pwd.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -20,6 +21,7 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <termios.h>
@@ -30,6 +32,7 @@
 
 #define UNKNOWN_VALUE           -1
 
+#define WEB_SITE_OWNER          "lee"
 #define RADIO                   "/dev/ttyACM0"
 #define BAUD_RATE               B57600
 
@@ -63,6 +66,8 @@
 #define PC_RAIN_STATUS      MAX_VC
 #define PC_WIND_STATUS      (PC_RAIN_STATUS + 1)
 
+uid_t uid;
+gid_t gid;
 uint8_t inputBuffer[1 + 3 + INPUT_BUFFER_SIZE];
 uint8_t outputBuffer[OUTPUT_BUFFER_SIZE];
 int myVcAddr;
@@ -302,17 +307,88 @@ int radioToStdout()
   return 0;
 }
 
+int createPath(const char * path)
+{
+  char character;
+  char directoryPath[256];
+  int offset;
+  int status;
+
+  offset = 0;
+  status = 0;
+  while (1)
+  {
+    //Check for end-of-string
+    if (!path[offset])
+      break;
+
+    //Check for a directory separator
+    character = path[offset];
+    directoryPath[offset] = character;
+    offset += 1;
+    if ((offset <= 5) || (character != '/'))
+      continue;
+
+    //Zero terminate the directory name
+    directoryPath[offset] = 0;
+
+    //Attempt to create the directory
+    status = mkdir(directoryPath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+
+    //Skip directories that exist
+    if ((status == -1) && (errno == EEXIST))
+    {
+      status = 0;
+      continue;
+    }
+
+    //Return an error if the directory create fails
+    else if (status == -1)
+    {
+      status = errno;
+      fprintf(stderr, "ERROR: Failed to create the directory %s!\n", directoryPath);
+      break;
+    }
+
+    //The directory was successfully created, set the ownership
+    status = chown(directoryPath, uid, gid);
+    if (status)
+    {
+      status = errno;
+      fprintf(stderr, "ERROR: Failed to set owner for %s!", directoryPath);
+      break;
+    }
+  }
+  return status;
+}
+
 int openSensorFile(const char * sensorName)
 {
+  int day;
   int file;
-  char fileName[128];
+  char fileName[256];
+  int month;
+  int year;
 
   //Get the file name
-  sprintf(fileName, "/var/www/html/WeatherData/%s_%04d-%02d-%02d.txt", sensorName, timeCurrent->tm_year + 1900,
-          timeCurrent->tm_mon + 1, timeCurrent->tm_mday);
-  file = open(fileName, O_CREAT | O_RDWR | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  year = timeCurrent->tm_year + 1900;
+  month = timeCurrent->tm_mon + 1;
+  day = timeCurrent->tm_mday;
+  sprintf(fileName,
+          "/var/www/html/WeatherData/%4d/%02d/%s_%04d-%02d-%02d.txt",
+          year, month, sensorName, year, month, day);
+
+  //Create the directory path if necessary
+  if (createPath(fileName))
+    return -1;
+
+  //Attempt to open the existing file, create it if necessary
+  file = open(fileName, O_APPEND | O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   if (file < 0)
-    perror("ERROR: Failed to open the rain sensor file!");
+  {
+    perror(NULL);
+    fprintf(stderr, "ERROR: Failed to open the %s sensor file!\n", sensorName);
+  }
   return file;
 }
 
@@ -347,6 +423,26 @@ int fillSensorFiles()
   return 0;
 }
 
+int getUidAndGid(const char * userName)
+{
+  struct passwd * entry;
+
+  //Walk the password file to locate the specified user
+  do
+  {
+    entry = getpwent();
+    if (strcmp(entry->pw_name, userName) == 0)
+    {
+      uid = entry->pw_uid;
+      gid = entry->pw_gid;
+      return 0;
+    }
+  } while(1);
+
+  //The user was not found
+  return -1;
+}
+
 int main(int argc, char **argv)
 {
     int bytesWritten;
@@ -357,6 +453,15 @@ int main(int argc, char **argv)
     int status;
     struct termios tty;
     struct timeval timeout;
+
+    //Get the user's UID and GID
+    if (getUidAndGid(WEB_SITE_OWNER))
+    {
+      fprintf(stderr,
+              "ERROR: Failed to get UID and GID for the web site owner %s\n",
+              WEB_SITE_OWNER);
+      return -1;
+    }
 
     //Wait for the radio
     printf("Waiting for the radio...\n");
@@ -406,18 +511,12 @@ int main(int argc, char **argv)
     //Open the rain file
     rainFile = openSensorFile("Rain");
     if (rainFile < 0)
-    {
-      perror("ERROR: Failed to open the rain file!");
-      return errno;
-    }
+      return rainFile;
 
     //Open the wind file
     windFile = openSensorFile("Wind");
     if (windFile < 0)
-    {
-      perror("ERROR: Failed to open the wind file!");
-      return errno;
-    }
+      return windFile;
 
     //Fill the files with unknown values
     status = fillSensorFiles();
