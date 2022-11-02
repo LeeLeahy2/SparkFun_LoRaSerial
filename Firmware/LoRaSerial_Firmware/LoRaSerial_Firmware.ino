@@ -43,7 +43,7 @@ const int FIRMWARE_VERSION_MAJOR = 2;
 const int FIRMWARE_VERSION_MINOR = 0;
 
 #define RADIOLIB_LOW_LEVEL  //Enable access to the module functions
-#define ENABLE_DEVELOPER //Uncomment this line to enable special developer modes
+//#define ENABLE_DEVELOPER //Uncomment this line to enable special developer modes
 
 #define UNUSED(x) (void)(x)
 
