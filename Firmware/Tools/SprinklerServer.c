@@ -382,8 +382,13 @@ int openSensorFile(const char * sensorName)
   if (createPath(fileName))
     return -1;
 
-  //Attempt to open the existing file, create it if necessary
-  file = open(fileName, O_APPEND | O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  //Attempt to open the existing file
+  file = open(fileName, O_RDWR);
+  if (file >= 0)
+    return file;
+
+  //Attempt to create the file
+  file = open(fileName, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   if (file < 0)
   {
     perror(NULL);
@@ -395,7 +400,10 @@ int openSensorFile(const char * sensorName)
 int fillSensorFiles()
 {
   int bytesWritten;
+  int deltaBytes;
+  off_t fileLength;
   int length;
+  int status;
 
   //Get the current time
   now = time(NULL);
@@ -407,15 +415,37 @@ int fillSensorFiles()
   length = (length * 60) + timeCurrent->tm_min;
   length = (length * 60) + timeCurrent->tm_sec;
 
-  //Write the unknowns to the file
-  bytesWritten = write(rainFile, unknownData, length);
-  if (bytesWritten != length)
+  //Get the length of the rain file
+  fileLength = lseek(rainFile, 0, SEEK_END);
+  if (fileLength == (off_t)-1)
+  {
+    status = errno;
+    perror("ERROR: Failed to get the length of the rain file!");
+    return status;
+  }
+
+  //Write the unknowns to the rain file
+  deltaBytes = length - fileLength;
+  bytesWritten = write(rainFile, unknownData, deltaBytes);
+  if (bytesWritten != deltaBytes)
   {
     perror("ERROR: Failed writing unknowns to rain file");
     return errno;
   }
-  bytesWritten = write(windFile, unknownData, length);
-  if (bytesWritten != length)
+
+  //Get the length of the wind file
+  fileLength = lseek(windFile, 0, SEEK_END);
+  if (fileLength == (off_t)-1)
+  {
+    status = errno;
+    perror("ERROR: Failed to get the length of the wind file!");
+    return status;
+  }
+
+  //Write the unknowns to the rain file
+  deltaBytes = length - fileLength;
+  bytesWritten = write(windFile, unknownData, deltaBytes);
+  if (bytesWritten != deltaBytes)
   {
     perror("ERROR: Failed writing unknowns to wind file");
     return errno;
@@ -475,7 +505,6 @@ int main(int argc, char **argv)
     }
     while (radio < 0);
 
-    printf("Waiting for VC data...\n");
     if (maxfds < radio)
       maxfds = radio;
 
@@ -531,6 +560,7 @@ int main(int argc, char **argv)
     //Set the timeout
     timeout.tv_sec = 0;
     timeout.tv_usec = 50 * 1000;
+    printf("Waiting for VC data...\n");
     while (1)
     {
       //Wait for receive data or timeout
