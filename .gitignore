@@ -54,6 +54,7 @@ Icon
 # Executables
 Firmware/Tools/Client
 Firmware/Tools/Command_Test
+Firmware/Tools/MysqlTest
 Firmware/Tools/Server
 Firmware/Tools/SprinklerServer
 Firmware/Tools/VcServerTest
