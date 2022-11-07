@@ -10,6 +10,7 @@
 
 EXECUTABLES  = Client
 EXECUTABLES += Command_Test
+EXECUTABLES += MysqlTest
 EXECUTABLES += Server
 EXECUTABLES += SprinklerServer
 EXECUTABLES += VcServerTest
@@ -59,6 +60,9 @@ Client: Client.c $(COMMON_LIB)
 
 Command_Test: Command_Test.c $(COMMON_LIB)
 	$(CC) -o $@ $^
+
+MysqlTest: MysqlTest.c $(COMMON_LIB)
+	$(CC) -o $@ $^ -lmysqlclient
 
 Server: Server.c $(COMMON_LIB)
 	$(CC) -o $@ $^
