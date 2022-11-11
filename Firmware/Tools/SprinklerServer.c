@@ -28,7 +28,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define START_OF_HEADING        1
+#include "../LoRaSerial_Firmware/Virtual_Circuit_Protocol.h"
 
 #define UNKNOWN_VALUE           -1
 
@@ -36,9 +36,6 @@
 #define RADIO                   "/dev/ttyACM0"
 #define BAUD_RATE               B57600
 
-#define ENTER_COMMAND_MODE      "+++\r"
-#define OK_RESPONSE             "OK"
-#define ERROR_RESPONSE          "ERROR"
 #define READ_TIMEOUT            250     //Milliseconds
 
 #define INPUT_BUFFER_SIZE       128
@@ -49,19 +46,6 @@
 #define STDERR                  2
 
 #define MAX_MESSAGE_SIZE      128
-
-//Virtual-Circuit source and destination index values
-#define MAX_VC              8
-#define VC_SERVER           0
-#define VC_BROADCAST        -1
-#define VC_UNASSIGNED       -2
-
-//Source and destinations reserved for the local radio
-#define VC_COMMAND          -3    //Command input
-
-//Source and destinations reserved for the local host
-#define PC_COMMAND          -10   //Command input and command response
-#define PC_LINK_STATUS      -11   //Asynchronous link status output
 
 #define PC_RAIN_STATUS      MAX_VC
 #define PC_WIND_STATUS      (PC_RAIN_STATUS + 1)
@@ -152,7 +136,7 @@ int stdinToRadio()
   else
   {
     //Adjust bytesRead to account for the VC header
-    vcData[0] = START_OF_HEADING;
+    vcData[0] = START_OF_VC_SERIAL;
     vcData[1] = bytesRead + 3;
 //    vcData[2] = remoteVcAddr;
 //    vcData[3] = myVcAddr;
@@ -211,7 +195,7 @@ int radioToStdout()
   {
     //Locate the start of the virtual circuit data
     data = dataStart;
-    while ((data < dataEnd) && (*data != START_OF_HEADING))
+    while ((data < dataEnd) && (*data != START_OF_VC_SERIAL))
       data++;
 
     //Just print any non-virtual-circuit data
