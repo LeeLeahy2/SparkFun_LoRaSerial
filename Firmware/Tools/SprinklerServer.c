@@ -138,10 +138,8 @@ int stdinToRadio()
     //Adjust bytesRead to account for the VC header
     vcData[0] = START_OF_VC_SERIAL;
     vcData[1] = bytesRead + 3;
-//    vcData[2] = remoteVcAddr;
-//    vcData[3] = myVcAddr;
-    vcData[2] = VC_COMMAND;
-    vcData[3] = PC_COMMAND;
+    vcData[2] = remoteVcAddr;
+    vcData[3] = (remoteVcAddr == VC_COMMAND) ? PC_COMMAND : myVcAddr;
     bytesRead += 1 + 3;
 
     //Send this data over the VC
@@ -467,6 +465,33 @@ int main(int argc, char **argv)
     int status;
     struct termios tty;
     struct timeval timeout;
+
+    //Display the help text if necessary
+    if (argc != 4)
+    {
+      printf("%s   target_VC\n", argv[0]);
+      printf("\n");
+      printf("target_VC:\n");
+      printf("    Client: 1 - %d\n", MAX_VC - 1);
+      printf("    Loopback: %d\n", VC_SERVER);
+      printf("    Broadcast: %d\n", VC_BROADCAST);
+      printf("    Command: %d\n", VC_COMMAND);
+      return -1;
+    }
+
+    //Determine the remote VC address
+    if ((sscanf(argv[1], "%d", &remoteVcAddr) != 1)
+      || (remoteVcAddr < VC_COMMAND) || (remoteVcAddr >= MAX_VC))
+    {
+      fprintf(stderr, "ERROR: Invalid target VC address, please use one of the following:\n");
+      if (myVcAddr)
+        fprintf(stderr, "    Server: 0\n");
+      fprintf(stderr, "    Client: 1 - %d\n", MAX_VC - 1);
+      fprintf(stderr, "    Loopback: my_VC\n");
+      fprintf(stderr, "    Broadcast: %d\n", VC_BROADCAST);
+      fprintf(stderr, "    Command: %d\n", VC_COMMAND);
+      return -1;
+    }
 
     //Get the user's UID and GID
     if (getUidAndGid(WEB_SITE_OWNER))

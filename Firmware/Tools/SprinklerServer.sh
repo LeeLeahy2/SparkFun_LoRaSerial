@@ -42,5 +42,5 @@ cd /home/lee/SparkFun/LoRaSerial/Firmware/Tools
 while [ 1 -ne 0 ]; do
 
     # Run the program
-    ./SprinklerServer
+    ./SprinklerServer   -2
 done
