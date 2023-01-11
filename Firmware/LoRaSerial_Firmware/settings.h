@@ -239,8 +239,20 @@ enum
   //        triggerUseWidthAsMultiplier = true
   //        triggerEnable = 0xffffffff
 
+  TRIGGER_TRANSACTION_COMPLETE, // 14uS
+  TRIGGER_CHANNEL_TIMER_ISR, // 24uS
+  TRIGGER_SYNC_CHANNEL_TIMER, // 34uS
+  TRIGGER_HOP_TIMER_START, // 44uS
+
+  TRIGGER_TX_LOAD_CHANNE_TIMER_VALUE, // 54uS
+  TRIGGER_HOP_TIMER_STOP, // 64uS
+  TRIGGER_RX_VC_HEARTBEAT, // 74uS
+  TRIGGER_TX_VC_HEARTBEAT, // 84uS
+
+//---------------------------
+
   TRIGGER_BAD_PACKET,
-  TRIGGER_CHANNEL_TIMER_ISR,
+//  TRIGGER_CHANNEL_TIMER_ISR,
   TRIGGER_CRC_ERROR,
   TRIGGER_FREQ_CHANGE,
   TRIGGER_HANDSHAKE_COMPLETE,
@@ -248,8 +260,8 @@ enum
   TRIGGER_HANDSHAKE_SEND_SYNC_CLOCKS_COMPLETE,
   TRIGGER_HANDSHAKE_SYNC_CLOCKS_TIMEOUT,
   TRIGGER_HANDSHAKE_ZERO_ACKS_TIMEOUT,
-  TRIGGER_HOP_TIMER_START,
-  TRIGGER_HOP_TIMER_STOP,
+//  TRIGGER_HOP_TIMER_START,
+//  TRIGGER_HOP_TIMER_STOP,
   TRIGGER_MP_PACKET_RECEIVED,
   TRIGGER_MP_SCAN,
   TRIGGER_MP_TX_DATA,
@@ -268,20 +280,20 @@ enum
   TRIGGER_RX_HEARTBEAT,
   TRIGGER_RX_SPI_DONE,
   TRIGGER_RX_SYNC_CLOCKS,
-  TRIGGER_RX_VC_HEARTBEAT,
+//  TRIGGER_RX_VC_HEARTBEAT,
   TRIGGER_RX_VC_SYNC_ACKS,
   TRIGGER_RX_VC_UNKNOWN_ACKS,
   TRIGGER_RX_VC_ZERO_ACKS,
   TRIGGER_RX_YIELD,
   TRIGGER_RX_ZERO_ACKS,
-  TRIGGER_SYNC_CHANNEL_TIMER,
+//  TRIGGER_SYNC_CHANNEL_TIMER,
   TRIGGER_TRAINING_CLIENT_RX_PARAMS,
   TRIGGER_TRAINING_CLIENT_TX_ACK_DONE,
   TRIGGER_TRAINING_CLIENT_TX_FIND_PARTNER_DONE,
   TRIGGER_TRAINING_SERVER_RX,
   TRIGGER_TRAINING_SERVER_RX_ACK,
   TRIGGER_TRAINING_SERVER_TX_PARAMS_DONE,
-  TRIGGER_TRANSACTION_COMPLETE,
+//  TRIGGER_TRANSACTION_COMPLETE,
   TRIGGER_TRANSMIT_CANCELED,
   TRIGGER_TX_ACK,
   TRIGGER_TX_COMMAND,
@@ -292,10 +304,10 @@ enum
   TRIGGER_TX_DUPLICATE_ACK,
   TRIGGER_TX_FIND_PARTNER,
   TRIGGER_TX_HEARTBEAT,
-  TRIGGER_TX_LOAD_CHANNE_TIMER_VALUE,
+//  TRIGGER_TX_LOAD_CHANNE_TIMER_VALUE,
   TRIGGER_TX_SPI_DONE,
   TRIGGER_TX_SYNC_CLOCKS,
-  TRIGGER_TX_VC_HEARTBEAT,
+//  TRIGGER_TX_VC_HEARTBEAT,
   TRIGGER_TX_VC_SYNC_ACKS,
   TRIGGER_TX_VC_UNKNOWN_ACKS,
   TRIGGER_TX_VC_ZERO_ACKS,
@@ -382,8 +394,8 @@ typedef struct struct_settings {
 
   uint32_t serialSpeed = 57600; //Default to 57600bps to match RTK Surveyor default firmware
   uint32_t airSpeed = 4800; //Default to ~523 bytes per second to support RTCM. Overrides spread, bandwidth, and coding
-  uint8_t netID = 192; //Both radios must share a network ID
-  uint8_t operatingMode = MODE_POINT_TO_POINT; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
+  uint8_t netID = 179; //Both radios must share a network ID
+  uint8_t operatingMode = MODE_VIRTUAL_CIRCUIT; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
   bool encryptData = true; //AES encrypt each packet
   uint8_t encryptionKey[AES_KEY_BYTES] = { 0x37, 0x78, 0x21, 0x41, 0xA6, 0x65, 0x73, 0x4E, 0x44, 0x75, 0x67, 0x2A, 0xE6, 0x30, 0x83, 0x08 };
   bool dataScrambling = false; //Use IBM Data Whitening to reduce DC bias
@@ -410,7 +422,7 @@ typedef struct struct_settings {
   bool flowControl = false; //Enable the use of CTS/RTS flow control signals
   bool autoTuneFrequency = false; //Based on the last packets frequency error, adjust our next transaction frequency
   bool printPacketQuality = false; //Print RSSI, SNR, and freqError for received packets
-  uint8_t maxResends = 0; //Attempt resends up to this number, 0 = infinite retries
+  uint8_t maxResends = 5; //Attempt resends up to this number, 0 = infinite retries
   bool printFrequency = false; //Print the updated frequency
   bool debugRadio = false; //Print radio info
   bool debugStates = false; //Print state changes
@@ -420,32 +432,32 @@ typedef struct struct_settings {
 #else   //ENABLE_DEVELOPER
 #define WAIT_SERIAL_DEFAULT     false
 #endif  //ENABLE_DEVELOPER
-  bool usbSerialWait = WAIT_SERIAL_DEFAULT; //Wait for USB serial initialization
+  bool usbSerialWait = false; //Wait for USB serial initialization
   bool printRfData = false; //Print RX and TX data
   bool printPktData = false; //Print data, before encryption and after decryption
-  bool verifyRxNetID = false; //Verify RX netID value when not operating in point-to-point mode
-  uint8_t triggerWidth = 25; //Trigger width in microSeconds or multipler for trigger width
+  bool verifyRxNetID = true; //Verify RX netID value when not operating in point-to-point mode
+  uint8_t triggerWidth = 10; //Trigger width in microSeconds or multipler for trigger width
   bool triggerWidthIsMultiplier = true; //Use the trigger width as a multiplier
-  uint32_t triggerEnable = 0; //Determine which triggers are enabled: 31 - 0
+  uint32_t triggerEnable = 255; //Determine which triggers are enabled: 31 - 0
   uint32_t triggerEnable2 = 0; //Determine which triggers are enabled: 63 - 32
   bool debugReceive = false; //Print receive processing
   bool debugTransmit = false; //Print transmit processing
   bool printTxErrors = false; //Print any transmit errors
-  bool printTimestamp = false; //Print a timestamp: days hours:minutes:seconds.milliseconds
+  bool printTimestamp = true; //Print a timestamp: days hours:minutes:seconds.milliseconds
   bool debugDatagrams = false; //Print the datagrams
   uint16_t overheadTime = 10; //ms added to ack and datagram times before ACK timeout occurs
-  bool enableCRC16 = false; //Append CRC-16 to packet, check CRC-16 upon receive
+  bool enableCRC16 = true; //Append CRC-16 to packet, check CRC-16 upon receive
   bool displayRealMillis = false; //true = Display the millis value without offset, false = use offset
   bool server = false; //Default to being a client, enable server for multipoint, VC and training
   uint8_t clientFindPartnerRetryInterval = 3; //Number of seconds before retransmiting the client FIND_PARTNER
-  bool copyDebug = false; //Copy the debug parameters to the training client
-  bool copySerial = false; //Copy the serial parameters to the training client
-  bool copyTriggers = false; //Copy the trigger parameters to the training client
+  bool copyDebug = true; //Copy the debug parameters to the training client
+  bool copySerial = true; //Copy the serial parameters to the training client
+  bool copyTriggers = true; //Copy the trigger parameters to the training client
   uint8_t trainingKey[AES_KEY_BYTES] = { 0x53, 0x70, 0x61, 0x72, 0x6b, 0x46, 0x75, 0x6E, 0x54, 0x72, 0x61, 0x69, 0x6e, 0x69, 0x6e, 0x67 };
-  bool printLinkUpDown = false; //Print the link up and link down messages
+  bool printLinkUpDown = true; //Print the link up and link down messages
   bool invertCts = false; //Invert the input of CTS
   bool invertRts = false; //Invert the output of RTS
-  uint8_t selectLedUse = 0; //Select LED use
+  uint8_t selectLedUse = 2; //Select LED use
   uint8_t trainingTimeout = 1; //Timeout in minutes to complete the training
   bool debugSerial = false; //Debug the serial input
   bool debugSync = false; //Print clock sync processing
