@@ -56,57 +56,6 @@
     timestampOffset >>= rShift;                                                        \
   }
 
-#define COMPUTE_RX_TIME(millisBuffer, rShift, frameAirTimeUsec)                 \
-  {                                                                             \
-    currentMillis = millis();                                                   \
-    long deltaUsec = micros() - transactionCompleteMicros;                      \
-    if ((!rxFirstAck) || (deltaUsec < rxTimeUsec))                              \
-    {                                                                           \
-      rxFirstAck = true;                                                        \
-      rxTimeUsec = deltaUsec;                                                   \
-      txRxTimeMsec = (txTimeUsec + rxTimeUsec) / 1000;                          \
-                                                                                \
-      /*Display the results*/                                                   \
-      if (settings.debugSync)                                                   \
-      {                                                                         \
-        systemPrintTimestamp(radioCallHistory[RADIO_CALL_transactionCompleteISR] + timestampOffset);  \
-        systemPrint(" RX Time: ");                                              \
-        systemPrint(rxTimeUsec);                                                \
-        systemPrintln(" uSec");                                                 \
-        systemPrint(" TX + RX Time: ");                                         \
-        systemPrint(txRxTimeMsec);                                              \
-        systemPrintln(" mSec");                                                 \
-      }                                                                         \
-    }                                                                           \
-                                                                                \
-    /*Adjust the timestamp offset*/                                             \
-    COMPUTE_TIMESTAMP_OFFSET(millisBuffer, rShift, frameAirTimeUsec);           \
-  }
-
-#define COMPUTE_TX_TIME()                                                       \
-  {                                                                             \
-    currentMillis = millis();                                                   \
-    long deltaUsec = transactionCompleteMicros - txDatagramMicros;              \
-    if ((!txFirstAck) || (deltaUsec < txTimeUsec))                              \
-    {                                                                           \
-      txFirstAck = true;                                                        \
-      txTimeUsec = deltaUsec;                                                   \
-      txRxTimeMsec = (txTimeUsec + rxTimeUsec) / 1000;                          \
-                                                                                \
-      /*Display the results*/                                                   \
-      if (settings.debugSync)                                                   \
-      {                                                                         \
-        systemPrintTimestamp(currentMillis + timestampOffset);                  \
-        systemPrint(" TX Time: ");                                              \
-        systemPrint(txTimeUsec);                                                \
-        systemPrintln(" uSec");                                                 \
-        systemPrint(" TX + RX Time: ");                                         \
-        systemPrint(txRxTimeMsec);                                              \
-        systemPrintln(" mSec");                                                 \
-      }                                                                         \
-    }                                                                           \
-  }
-
 //Process the radio states
 void updateRadioState()
 {
@@ -354,8 +303,7 @@ void updateRadioState()
 
           case DATAGRAM_FIND_PARTNER:
             //Received FIND_PARTNER
-            //Compute the receive time
-            COMPUTE_RX_TIME(rxData, 1, calcAirTimeUsec(headerBytes + P2P_FIND_PARTNER_BYTES + trailerBytes));
+            COMPUTE_TIMESTAMP_OFFSET(rxData, 1, txFindPartnerUsec);
 
             //This system is the source of clock synchronization
             clockSyncReceiver = false; //P2P clock source
@@ -363,8 +311,8 @@ void updateRadioState()
             //Display the channelTimer source
             if (settings.debugSync)
             {
-              systemPrint("Sourcing channelTimer, TX + RX mSec: ");
-              systemPrintln(txRxTimeMsec);
+              systemPrintTimestamp();
+              systemPrintln("Sourcing channelTimer");
             }
 
             //Acknowledge the FIND_PARTNER with SYNC_CLOCKS
@@ -398,7 +346,6 @@ void updateRadioState()
       //Determine if a FIND_PARTNER has completed transmission
       if (transactionComplete)
       {
-        COMPUTE_TX_TIME();
         triggerEvent(TRIGGER_TX_DONE);
         transactionComplete = false; //Reset ISR flag
         startChannelTimerPending = true; //Starts at RX of SYNC_CLOCKS frame
@@ -445,7 +392,7 @@ void updateRadioState()
           case DATAGRAM_FIND_PARTNER:
             //Received FIND_PARTNER
             //Compute the receive time
-            COMPUTE_RX_TIME(rxData + 1, 1, calcAirTimeUsec(headerBytes + P2P_FIND_PARTNER_BYTES + trailerBytes));
+            COMPUTE_TIMESTAMP_OFFSET(rxData + 1, 1, txFindPartnerUsec);
 
             //Acknowledge the FIND_PARTNER
             triggerEvent(TRIGGER_TX_SYNC_CLOCKS);
@@ -461,12 +408,12 @@ void updateRadioState()
             //Display the channelTimer sink
             if (settings.debugSync)
             {
-              systemPrint("Syncing channelTimer, TX + RX mSec: ");
-              systemPrintln(txRxTimeMsec);
+              systemPrintTimestamp();
+              systemPrintln("Syncing channelTimer");
             }
 
             //Compute the receive time
-            COMPUTE_RX_TIME(rxData + 1, 1, txSyncClocksUsec);
+            COMPUTE_TIMESTAMP_OFFSET(rxData + 1, 1, txSyncClocksUsec);
 
             //Hop to the next channel
             hopChannel();
@@ -515,18 +462,6 @@ void updateRadioState()
       //Determine if a SYNC_CLOCKS has completed transmission
       if (transactionComplete)
       {
-        //Compute the SYNC_CLOCKS frame transmit frame
-        if ((!txSyncClocksUsec) && (txControl.datagramType == DATAGRAM_SYNC_CLOCKS))
-        {
-          txSyncClocksUsec = transactionCompleteMicros - txSetChannelTimerMicros;
-          if (settings.debugSync)
-          {
-            systemPrint("txSyncClocksUsec: ");
-            systemPrintln(txSyncClocksUsec);
-          }
-        }
-
-        COMPUTE_TX_TIME();
         triggerEvent(TRIGGER_TX_DONE);
         transactionComplete = false; //Reset ISR flag
 
@@ -566,10 +501,6 @@ void updateRadioState()
             break;
 
           case DATAGRAM_ZERO_ACKS:
-            //Received ACK 2
-            //Compute the receive time
-            COMPUTE_RX_TIME(rxData, 1, calcAirTimeUsec(headerBytes + P2P_ZERO_ACKS_BYTES + trailerBytes));
-
             setHeartbeatLong(); //We sent SYNC_CLOCKS and they sent ZERO_ACKS, so don't be the first to send heartbeat
 
             //Bring up the link
@@ -616,8 +547,6 @@ void updateRadioState()
       if (transactionComplete)
       {
         transactionComplete = false; //Reset ISR flag
-        COMPUTE_TX_TIME();
-
         setHeartbeatShort(); //We sent the last ack so be responsible for sending the next heartbeat
 
         //Bring up the link
@@ -698,34 +627,6 @@ void updateRadioState()
       if (transactionComplete)
       {
         transactionComplete = false; //Reset ISR flag
-
-        //Compute the ACK frame transmit frame
-        if ((!txDataAckUsec) && (txControl.datagramType == DATAGRAM_HEARTBEAT))
-        {
-          txDataAckUsec = transactionCompleteMicros - txSetChannelTimerMicros;
-          if (settings.debugSync)
-          {
-            systemPrint("txDataAckUsec: ");
-            systemPrintln(txDataAckUsec);
-          }
-        }
-
-        //Compute the HEARTBEAT frame transmit frame
-        if ((!txHeartbeatUsec) && (txControl.datagramType == DATAGRAM_HEARTBEAT))
-        {
-          txHeartbeatUsec = transactionCompleteMicros - txSetChannelTimerMicros;
-          if (settings.debugSync)
-          {
-            systemPrint("txHeartbeatUsec: ");
-            systemPrintln(txHeartbeatUsec);
-          }
-        }
-
-        //Determine if an ACK was transmitted
-        if (txControl.datagramType == DATAGRAM_DATA_ACK)
-        {
-          COMPUTE_TX_TIME();
-        }
         triggerEvent(TRIGGER_TX_DONE);
 
         //Determine the next packet size for SF6
@@ -823,7 +724,7 @@ void updateRadioState()
 
           case DATAGRAM_DATA_ACK:
             //Adjust the timestamp offset
-            COMPUTE_RX_TIME(rxData, 1, txDataAckUsec);
+            COMPUTE_TIMESTAMP_OFFSET(rxData, 1, txDataAckUsec);
 
             //The datagram we are expecting
             syncChannelTimer(txDataAckUsec); //Adjust freq hop ISR based on remote's remaining clock
@@ -1130,12 +1031,6 @@ void updateRadioState()
     //Walk through channel table backwards, transmitting a FIND_PARTNER and looking for an SYNC_CLOCKS
     //====================
     case RADIO_DISCOVER_SCANNING:
-      if (settings.server)
-      {
-        changeState(RADIO_MP_STANDBY);
-        break;
-      }
-
       stopChannelTimer(); //Stop hopping - multipoint discovery
 
       if (transactionComplete)
