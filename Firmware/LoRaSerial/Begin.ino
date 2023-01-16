@@ -36,6 +36,7 @@ void beginLoRa()
     systemPrintln(state);
     waitForever("Radio init failed!");
   }
+  online.radio = true;
 
   changeState(RADIO_RESET);
 }

@@ -542,7 +542,6 @@ bool enableSprinklerController;   //Enable the sprinkler controller
 bool turnWaterOff;                //Set true when zone is being turned off
 
 //Sprinkler controller schedule for today
-uint32_t startOfDay;              //Number of milliseconds at midnight
 uint32_t timeOfDay;               //Number of milliseconds from midnight
 uint8_t dayOfWeek;                //Day of week 0 - 6
 bool scheduleCopied;              //True after daily schedule copied from week to today;

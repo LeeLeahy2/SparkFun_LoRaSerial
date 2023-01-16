@@ -42,13 +42,21 @@ typedef struct
 //Process the AT commands
 bool commandAT(const char * commandString)
 {
+  uint32_t currentTime;
   uint32_t delayMillis;
   long deltaMillis;
+  uint8_t hours;
   uint8_t id[UNIQUE_ID_BYTES];
+  uint8_t minutes;
+  bool printStartTime;
+  uint8_t seconds;
   const char * string;
   unsigned long timer;
+  char timeString[16];
+  uint32_t value;
   VIRTUAL_CIRCUIT * vc = &virtualCircuitList[cmdVc];
   uint8_t vcIndex;
+  int zone;
 
   //'AT'
   if (commandLength == 2)
@@ -71,6 +79,7 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATD - Display the debug settings");
         systemPrintln("  ATF - Restore factory settings");
         systemPrintln("  ATG - Generate new netID and encryption key");
+        systemPrintln("  ATH - Clear watering schedule");
         systemPrintln("  ATI - Display the radio version");
         systemPrintln("  ATI? - Display the information commands");
         systemPrintln("  ATIn - Display system information");
@@ -156,6 +165,15 @@ bool commandAT(const char * commandString)
       case ('G'): //ATG - Generate a new netID and encryption key
         generateRandomKeysID();
         return true;
+
+      case ('H'): //Clear the watering schedule
+        memset(&week, 0, sizeof(week));
+        memset(&today, 0, sizeof(today));
+        enableSprinklerController = false;
+        scheduleCopied = false;
+        scheduleReady = 0;
+        return true;
+        break;
 
       case ('I'): //ATI
         //Shows the radio version
@@ -250,6 +268,10 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI13 - Display the SX1276 registers");
         systemPrintln("  ATI14 - Dump the radioTxBuffer");
         systemPrintln("  ATI15 - Dump the NVM unique ID table");
+        systemPrintln("  ATI86 - Pulse zone power");
+        systemPrintln("  ATI87 - Display sprinkler controller status");
+        systemPrintln("  ATI88 - Display the sprinkler schedule");
+        systemPrintln("  ATI89 - Display current time and date");
         return true;
 
       case ('0'): //ATI0 - Show user settable parameters
@@ -299,6 +321,8 @@ bool commandAT(const char * commandString)
         return true;
     }
   }
+
+  //ATI1x
   if ((commandString[2] == 'I') && (commandString[3] == '1') && (commandLength == 5))
   {
     switch (commandString[4])
@@ -758,6 +782,176 @@ bool commandAT(const char * commandString)
     }
   }
 
+  //ATI8x
+  if ((commandString[2] == 'I') && (commandString[3] == '8') && (commandLength == 5))
+  {
+    switch (commandString[4])
+    {
+      default:
+        return false;
+
+      case ('6'): //ATI86 - Pulse zone power
+        //Turn on the relay
+        if (online.quadRelay)
+        {
+          quadRelay.turnRelayOn(commandZone);
+          currentTime = millis();
+          while ((millis() - currentTime) < settings.pulseDuration)
+          {
+            //Hop channels when required
+            if (timeToHop == true)
+              hopChannel();
+            petWDT();
+          }
+          quadRelay.turnRelayOff(commandZone);
+        }
+        return true;
+
+      case ('7'): //ATI87 - Display sprinkler controller status
+        systemPrintln("Sprinkler Controller Status");
+        systemPrint("    Radio: ");
+        if (!online.radio)
+          systemPrintln("Offline");
+        else if (virtualCircuitList[VC_SERVER].vcState == VC_STATE_CONNECTED)
+          systemPrintln("Connected to Sprinkler Server");
+        else
+          systemPrintln("Waiting for Sprinkler Server connection");
+        systemPrint("    EEPROM: ");
+        systemPrintln(online.eeprom ? "Available" : "Failed to initialize");
+        systemPrint("    Quad Relay: ");
+        systemPrintln(online.quadRelay ? "Availalbe" : "Failed to initialize");
+        systemPrint("    Time Stamp Offset: ");
+        systemPrintTimestamp(timestampOffset);
+        systemPrintln();
+        systemPrint("    Day: ");
+        systemPrintln(dayName[dayOfWeek]);
+        systemPrint("    Time: ");
+        systemPrintTimestamp(timeOfDay);
+        systemPrintln();
+        return true;
+
+      case ('8'): //ATI88 - Display the sprinkler schedule
+        //Determine if the controller is enabled
+        systemPrint("Controller: ");
+        if (!online.quadRelay)
+          systemPrintln("Broken - Quad relay offline!");
+        else
+          systemPrintln(enableSprinklerController ? "Enabled" : "Off - Disabled");
+
+        //Determine if any of the zones are enabled
+        systemPrintln("Schedule");
+        for (int index = 0; index < 7; index++)
+        {
+          for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
+            if (week[index].zoneScheduleDuration[zone])
+              break;
+          if (zone < ZONE_NUMBER_MAX)
+            break;
+        }
+        if (zone >= ZONE_NUMBER_MAX)
+          systemPrintln("    Controller Off: No schedule programmed");
+        else
+        {
+          //Display the schedule
+          for (int index = 0; index < 7; index++)
+          {
+            //Determine if any of the zones are enabled
+            for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
+              if (week[index].zoneScheduleDuration[zone])
+                break;
+
+            //Display the day of the week
+            if (zone < ZONE_NUMBER_MAX)
+            {
+              systemPrint("    ");
+              systemPrint(dayName[index]);
+
+              //Display the starting time
+              systemPrint(" starting at ");
+              getTime(week[index].scheduleStartTime, NULL, &hours, &minutes, &seconds, NULL);
+              if ((hours % 12) == 0)
+                systemPrint(12);
+              else if ((hours % 12) < 10)
+              {
+                systemPrint("0");
+                systemPrint(hours % 12);
+              }
+              else
+                systemPrint(hours % 12);
+              systemPrint(":");
+              if (minutes < 10)
+                systemPrint("0");
+              systemPrint(minutes);
+              systemPrint(":");
+              if (seconds < 10)
+                systemPrint("0");
+              systemPrint(seconds);
+              systemPrintln(hours < 12 ? " AM" : " PM");
+
+              //Display the zones
+              for (zone=0; zone < ZONE_NUMBER_MAX; zone++)
+              {
+                if (week[index].zoneScheduleDuration[zone])
+                {
+                  systemPrint("        Zone ");
+                  systemPrint(zone + 1);
+                  systemPrint(": ");
+                  getTime(week[index].zoneScheduleDuration[zone], NULL, &hours, &minutes, &seconds, NULL);
+                  if (hours < 10)
+                    systemPrint("0");
+                  systemPrint(hours);
+                  systemPrint(":");
+                  if (minutes < 10)
+                    systemPrint("0");
+                  systemPrint(minutes);
+                  systemPrint(":");
+                  if (seconds < 10)
+                    systemPrint("0");
+                  systemPrintln(seconds);
+                }
+              }
+            }
+          }
+        }
+
+        //Display the zone configuration
+        systemPrintln("Zones");
+        for (zone=0; zone < ZONE_NUMBER_MAX; zone++)
+        {
+          systemPrint("    ");
+          systemPrint(zone + 1);
+          systemPrint(": ");
+          systemPrint((latchingSolenoid & (1 << zone)) ? "Latching" : "AC");
+          systemPrintln(" solenoid");
+        }
+        return true;
+
+      case ('9'): //ATI89 - Display current time and date
+        getTime(timeOfDay, NULL, &hours, &minutes, &seconds, NULL);
+        systemPrint(dayName[dayOfWeek]);
+        systemPrint(", ");
+        if ((hours % 12) == 0)
+          systemPrint(12);
+        else if ((hours % 12) < 10)
+        {
+          systemPrint("0");
+          systemPrint(hours % 12);
+        }
+        else
+          systemPrint(hours % 12);
+        systemPrint(":");
+        if (minutes < 10)
+          systemPrint("0");
+        systemPrint(minutes);
+        systemPrint(":");
+        if (seconds < 10)
+          systemPrint("0");
+        systemPrint(seconds);
+        systemPrintln(hours < 12 ? " AM" : " PM");
+        return true;
+    }
+  }
+
   //Invalid command
   return false;
 }
@@ -1203,8 +1397,17 @@ const COMMAND_ENTRY commands[] =
 
   /*Sprinkler Controller parameters
     Ltr, All, reset, min, max, digits,    type,         validation,     name,                   setting addr */
-  {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "DebugSprinklers",      &settings.debugSprinklers},
-  {'Y',   0,   0,  100, 1000,   0, TYPE_U16,          valInt,         "PulseDuration",        &settings.pulseDuration},
+  {'Y',   0,   0,    0,   6,    0, TYPE_DAY,          valInt,         "CommandDay",           &commandDay},
+  {'Y',   0,   0,    0, ZONE_NUMBER_MAX, 0, TYPE_U8,  valInt,         "CommandZone",          &commandZone},
+  {'Y',   0,   0,    0,   6,    0, TYPE_DAY,          valInt,         "DayOfWeek",            &dayOfWeek},
+  {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "DebugSprinklers",      &tempSettings.debugSprinklers},
+  {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "EnableController",     &enableSprinklerController},
+  {'Y',   0,   0,    0,   1,    0, TYPE_ZONE_MASK,    valInt,         "LatchingSolenoid",     &latchingSolenoid},
+  {'Y',   0,   0,  100,  1000,  0, TYPE_U16,          valInt,         "PulseDuration",        &tempSettings.pulseDuration},
+  {'Y',   0,   0,    0, 86399999, 0, TYPE_START,      valInt,         "StartTime",            &week},
+  {'Y',   0,   0,    0, 86399999, 0, TYPE_TIME,       valInt,         "TimeOfDay",            &timeOfDay},
+  {'Y',   0,   0,    0,  7200000, 0, TYPE_DURATION,   valInt,         "ZoneDuration",         &week},
+  {'Y',   0,   0,    0,   1,    0, TYPE_ZONE_MASK,    valInt,         "ZoneManualOn",         &zoneManualOn},
 };
 
 const int commandCount = sizeof(commands) / sizeof(commands[0]);
@@ -1319,7 +1522,7 @@ void commandDisplay(const COMMAND_ENTRY * command)
       break;
     case TYPE_TIME:
       //Compute the time
-      seconds = *(uint32_t *)(command->setting) - startOfDay;
+      seconds = *(uint32_t *)(command->setting);
       hours = seconds / MILLISECONDS_IN_AN_HOUR;
       seconds -= hours * MILLISECONDS_IN_AN_HOUR;
       minutes = seconds / MILLISECONDS_IN_A_MINUTE;

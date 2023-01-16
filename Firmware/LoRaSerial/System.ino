@@ -1202,3 +1202,37 @@ void verifyTables()
   if (errorMessage)
     waitForever(errorMessage);
 }
+
+//Split time into days, hours, minutes, seconds and milliseconds
+void getTime(uint32_t timeInMillis, uint8_t * days, uint8_t * hours, uint8_t * minutes, uint8_t * seconds, uint16_t * milliseconds)
+{
+  uint32_t value;
+
+  //Determine the day number
+  value = timeInMillis / MILLISECONDS_IN_A_DAY;
+  if (days)
+    *days = value;
+  timeInMillis -= value * MILLISECONDS_IN_A_DAY;
+
+  //Determine the hour value
+  value = timeInMillis / MILLISECONDS_IN_AN_HOUR;
+  if (hours)
+    *hours = value;
+  timeInMillis -= value * MILLISECONDS_IN_AN_HOUR;
+
+  //Determine the minute value
+  value = timeInMillis / MILLISECONDS_IN_A_MINUTE;
+  if (minutes)
+    *minutes = value;
+  timeInMillis -= value * MILLISECONDS_IN_A_MINUTE;
+
+  //Determine the second value
+  value = timeInMillis / MILLISECONDS_IN_A_SECOND;
+  if (seconds)
+    *seconds = value;
+  timeInMillis -= value * MILLISECONDS_IN_A_SECOND;
+
+  //What remains is the millisecond value
+  if (milliseconds)
+    *milliseconds = timeInMillis;
+}

@@ -162,6 +162,7 @@ void samdBeginWDT()
 //Initilaize the EEPROM controller or simulation
 void samdEepromBegin()
 {
+  online.eeprom = true;
 }
 
 //Write any remaining data to EEPROM
