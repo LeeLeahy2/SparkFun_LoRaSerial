@@ -864,6 +864,8 @@ bool commandAT(const char * commandString)
         systemPrintln(online.eeprom ? "Available" : "Failed to initialize");
         systemPrint("    Quad Relay: ");
         systemPrintln(online.quadRelay ? "Availalbe" : "Failed to initialize");
+        systemPrint("    Display: ");
+        systemPrintln(online.display ? "In Use" : "Not installed");
         systemPrint("    Time Stamp Offset: ");
         systemPrintTimestamp(timestampOffset);
         systemPrintln();
@@ -1445,9 +1447,12 @@ const COMMAND_ENTRY commands[] =
   {'Y',   0,   0,    0, ZONE_NUMBER_MAX, 0, TYPE_U8,  valInt,         "CommandZone",          &commandZone},
   {'Y',   0,   0,    0,   6,    0, TYPE_DAY,          valInt,         "DayOfWeek",            &dayOfWeek},
   {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "DebugSprinklers",      &tempSettings.debugSprinklers},
+  {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "DisplayMilliseconds",  &tempSettings.displayMilliseconds},
+  {'Y',   0,   0,   50,  1000,  0, TYPE_U16,          valInt,         "DisplayUpdate",        &tempSettings.displayUpdate},
   {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "EnableController",     &enableSprinklerController},
   {'Y',   0,   0,    0,   1,    0, TYPE_LATCHING_MASK,valInt,         "LatchingSolenoid",     &latchingSolenoid},
   {'Y',   0,   0,  100,  1000,  0, TYPE_U16,          valInt,         "PulseDuration",        &tempSettings.pulseDuration},
+  {'Y',   0,   0,    0, 15000,  0, TYPE_U16,          valInt,         "SplashScreenDelay",    &tempSettings.splashScreenDelay},
   {'Y',   0,   0,    0, 86399999, 0, TYPE_START,      valInt,         "StartTime",            &week},
   {'Y',   0,   0,    0, 86399999, 0, TYPE_TIME,       valInt,         "TimeOfDay",            &timeOfDay},
   {'Y',   0,   0,    0,  7200000, 0, TYPE_DURATION,   valInt,         "ZoneDuration",         &week},
