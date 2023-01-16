@@ -9,14 +9,6 @@ uint16_t availableRXBytes()
   return (sizeof(serialReceiveBuffer) - rxTail + rxHead);
 }
 
-//Returns true if CTS is asserted (high = host says it's ok to send data)
-bool isCTS()
-{
-  if (pin_cts == PIN_UNDEFINED) return (true); //CTS not implmented on this board
-  if (settings.flowControl == false) return (true); //CTS turned off
-  return (digitalRead(pin_cts) == HIGH) ^ settings.invertCts;
-}
-
 #define NEXT_RX_TAIL(n)   ((rxTail + n) % sizeof(serialReceiveBuffer))
 
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -71,8 +63,6 @@ void serialOutputByte(uint8_t data)
 void updateRTS(bool assertRTS)
 {
   rtsAsserted = assertRTS;
-  if (settings.flowControl && (pin_rts != PIN_UNDEFINED))
-    digitalWrite(pin_rts, assertRTS ^ settings.invertRts);
 }
 
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -514,7 +504,7 @@ void outputSerialData(bool ignoreISR)
 
   //Forget printing if there are ISRs to attend to
   dataBytes = availableTXBytes();
-  while (dataBytes-- && isCTS() && (ignoreISR || (!transactionComplete)))
+  while (dataBytes-- && (ignoreISR || (!transactionComplete)))
   {
     blinkSerialTxLed(true); //Turn on LED during serial transmissions
 
