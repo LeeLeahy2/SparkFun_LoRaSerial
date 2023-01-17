@@ -9,6 +9,8 @@ WDTZero myWatchDog;
 #define NVM_ERASE_VALUE         0xff
 #define NVM_UNIQUE_ID_OFFSET    (EEPROM_EMULATION_SIZE - (MAX_VC * UNIQUE_ID_BYTES))
 
+void rainSensorIsr();
+
 /*
   Data flow
                    +--------------+
@@ -47,7 +49,7 @@ WDTZero myWatchDog;
                           | 38 PA13      |
                           | 0  PA10      |
                           | 1  PA11      |
-                          | 30 PB22      |
+    Rain Sensor --------->| 30 PB22      |
                           |              |
                           |      PA09  3 |---> rxen ---> LORA_RXEN
                           |      PA14  2 |---> txen ---> LORA_TXEN
@@ -61,6 +63,8 @@ WDTZero myWatchDog;
                           |      PA22 20 |---> SDA
                           +--------------+
 */
+
+const int pin_RainSensor = 30;
 
 //Initialize the LoRaSerial board
 void samdBeginBoard()

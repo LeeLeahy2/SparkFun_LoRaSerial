@@ -36,6 +36,7 @@ bool commandAT(const char * commandString)
 {
   uint32_t delayMillis;
   long deltaMillis;
+  int entries;
   uint8_t id[UNIQUE_ID_BYTES];
   const char * string;
   unsigned long timer;
@@ -242,6 +243,11 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI15 - Dump the NVM unique ID table");
         return true;
 
+        //Add user commands after this line
+        systemPrintln("  ATI97 - Display the total rain gauge count");
+        systemPrintln("  ATI98 - Display rain counts");
+        systemPrintln("  ATI99 - Display rain gauge values");
+        break;
       case ('0'): //ATI0 - Show user settable parameters
         displayParameters(0, true);
         return true;
@@ -745,6 +751,41 @@ bool commandAT(const char * commandString)
             systemPrintln("Empty");
         }
         return true;
+    }
+  }
+
+  //User ATI9x commands
+  else if ((commandString[2] == 'I') && (commandString[3] == '9') && (commandLength == 5))
+  {
+    switch (commandString[4])
+    {
+      default:
+        return false;
+      case ('7'): //ATI97 - Display the total rain gauge count
+        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        {
+          systemWrite(START_OF_VC_SERIAL);//Start byte
+          systemWrite(3 + 8 + 2);         //Length
+          systemWrite(PC_COMMAND);        //Destination
+          systemWrite(VC_COMMAND);        //Source
+        }
+        systemPrint((int)rainCountTotal, HEX);
+        systemPrintln();
+        break;
+      case ('8'): //ATI98 - Display rain counts
+        entries = sizeof(rainCount) / sizeof(rainCount[0]);
+        for (int i = 0; i < entries; i++)
+        {
+          systemPrint(rainCount[i]);
+          if ((((i + 1) % 10) == 0) || ((i + 1) == entries))
+            systemPrintln();
+          else
+            systemPrint(", ");
+        }
+        break;
+      case ('9'): //ATI99 - Display rain gauge values
+        displayRainFall();
+        break;
     }
   }
 

@@ -886,6 +886,25 @@ void blinkChannelHopLed(bool on)
   }
 }
 
+//Blink the rain LED
+void blinkRainLed(bool on)
+{
+  static unsigned long ledMillis;
+
+  switch (settings.selectLedUse)
+  {
+    case LEDS_WEATHER_STATION:
+      if (on)
+      {
+        digitalWrite(BLUE_LED, HIGH);
+        ledMillis = millis();
+      }
+      else if ((millis() - ledMillis) >= RADIO_USE_BLINK_MILLIS)
+        digitalWrite(BLUE_LED, LOW);
+    break;
+  }
+}
+
 //Display the multi-point LED pattern
 void multiPointLeds()
 {
@@ -1082,6 +1101,11 @@ void updateLeds()
       digitalWrite(GREEN_LED_4, LED_ON);
       digitalWrite(BLUE_LED, LED_ON);
       digitalWrite(YELLOW_LED, LED_ON);
+      break;
+
+    case LEDS_WEATHER_STATION:
+      //Turn off the rain LED
+      blinkRainLed(false);
       break;
   }
 }

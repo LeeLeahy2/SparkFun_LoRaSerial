@@ -369,6 +369,7 @@ typedef enum
   LEDS_ALL_ON,      //15: All LEDs on
 
   //Add user LED types from 255 working down
+  LEDS_WEATHER_STATION = 255,
 } LEDS_USE_TYPE;
 
 typedef struct _CLOCK_SYNC_DATA

@@ -199,6 +199,8 @@ uint16_t txHead = 0;
 uint16_t txTail = 0;
 uint8_t serialTransmitBuffer[1024 * 4]; //Bytes received from RF waiting to be printed out UART. Buffer up to 1s of bytes at 4k
 
+char tempBuffer[256];
+
 unsigned long lastByteReceived_ms = 0; //Track when last transmission was. Send partial buffer once time has expired.
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
@@ -595,6 +597,17 @@ unsigned long remoteSystemMillis; //Millis value contained in the received messa
 
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
+//Global variables - Weather Station
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+uint32_t rainCountTotal; //Number of times the rain sensor dumped 0.2794mm (0.010984252in) of water
+
+uint8_t rainCount[60]; //Each entry is a minute
+uint8_t rainIndex;
+float aveRainFall;
+float maxRainFall;
+float minRainFall;
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
 //Architecture variables
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 void updateRTS(bool assertRTS);
@@ -639,6 +652,9 @@ void setup()
 
   updateRTS(true); //Enable serial input
 
+  //Enable the weather station sensors
+  rainSensorBegin();
+
   systemPrintTimestamp();
   systemPrintln("LRS");
   outputSerialData(true);
@@ -662,4 +678,6 @@ void loop()
   updateLeds(); //Update the LEDs on the board
 
   updateHopISR(); //Clear hop ISR as needed
+
+  weatherStationUpdate(); //Get updates from the rain and wind sensors
 }
