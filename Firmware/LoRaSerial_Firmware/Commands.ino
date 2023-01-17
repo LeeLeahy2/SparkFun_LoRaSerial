@@ -244,6 +244,9 @@ bool commandAT(const char * commandString)
         return true;
 
         //Add user commands after this line
+        systemPrintln("  ATI94 - Display the total wind gauge count");
+        systemPrintln("  ATI95 - Display wind counts");
+        systemPrintln("  ATI96 - Display wind gauge values");
         systemPrintln("  ATI97 - Display the total rain gauge count");
         systemPrintln("  ATI98 - Display rain counts");
         systemPrintln("  ATI99 - Display rain gauge values");
@@ -761,6 +764,31 @@ bool commandAT(const char * commandString)
     {
       default:
         return false;
+      case ('4'): //ATI94 - Display the total wind gauge count
+        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        {
+          systemWrite(START_OF_VC_SERIAL);  //Start byte
+          systemWrite(3 + 8 + 2);         //Length
+          systemWrite(PC_COMMAND);        //Destination
+          systemWrite(VC_COMMAND);        //Source
+        }
+        systemPrint((int)windCountTotal, HEX);
+        systemPrintln();
+        break;
+      case ('5'): //ATI95 - Display wind counts
+        entries = sizeof(windCount) / sizeof(windCount[0]);
+        for (int i = 0; i < entries; i++)
+        {
+          systemPrint(windCount[i]);
+          if ((((i + 1) % 10) == 0) || ((i + 1) == entries))
+            systemPrintln();
+          else
+            systemPrint(", ");
+        }
+        break;
+      case ('6'): //ATI96 - Display wind gauge values
+        displayWindSpeed();
+        break;
       case ('7'): //ATI97 - Display the total rain gauge count
         if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
         {

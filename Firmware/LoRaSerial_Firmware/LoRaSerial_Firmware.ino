@@ -600,12 +600,19 @@ unsigned long remoteSystemMillis; //Millis value contained in the received messa
 //Global variables - Weather Station
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 uint32_t rainCountTotal; //Number of times the rain sensor dumped 0.2794mm (0.010984252in) of water
+uint32_t windCountTotal; //Number of times the wind switch closed, one closure/sec = 2.4km/h (1.49129 mi/h)
 
 uint8_t rainCount[60]; //Each entry is a minute
 uint8_t rainIndex;
 float aveRainFall;
 float maxRainFall;
 float minRainFall;
+
+uint8_t windCount[60]; //Each entry is a second
+uint8_t windIndex;
+float aveWindSpeed;
+float maxWindSpeed;
+float minWindSpeed;
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 //Architecture variables
@@ -654,6 +661,7 @@ void setup()
 
   //Enable the weather station sensors
   rainSensorBegin();
+  windSensorBegin();
 
   systemPrintTimestamp();
   systemPrintln("LRS");
