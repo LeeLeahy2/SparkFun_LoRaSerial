@@ -3,6 +3,7 @@
 
 #include <FlashAsEEPROM_SAMD.h> //Click here to get the library: http://librarymanager/All#FlashStorage_SAMD21 v1.2.1 by Khoi Hoang
 #include <WDTZero.h> //https://github.com/javos65/WDTZero
+
 WDTZero myWatchDog;
 
 #define NVM_ERASE_VALUE         0xff
@@ -12,16 +13,14 @@ WDTZero myWatchDog;
   Data flow
                    +--------------+
                    |     SAMD     |
-                   |              |
-    TTL Serial <-->| Serial1      |       +--------------+
+                   |              |       +--------------+
                    |          SPI |<----->| SX1276 Radio |<---> Antenna
     USB Serial <-->| Serial       |       +--------------+         ^
                    +--------------+                                |
                                                                    |
                    +--------------+                                |
                    |     SAMD     |                                |
-                   |              |                                |
-    TTL Serial <-->| Serial1      |       +--------------+         V
+                   |              |       +--------------+         V
                    |          SPI |<----->| SX1276 Radio |<---> Antenna
     USB Serial <-->| Serial       |       +--------------+
                    +--------------+
@@ -45,10 +44,10 @@ WDTZero myWatchDog;
                           |      PA16 11 |---> MOSI ---> SPI_PICO
                           |      PA19 12 |<--- MISO ---> SPI_POCI
                           |              |
-    RTS-0 <------ rts <---| 38 PA13      |
-    TX-0 <------- tx <----| 0  PA10      |
-    RX-I_LV <---- rx ---->| 1  PA11      |
-    CTS-I_LV <--- cts --->| 30 PB22      |
+                          | 38 PA13      |
+                          | 0  PA10      |
+                          | 1  PA11      |
+                          | 30 PB22      |
                           |              |
                           |      PA09  3 |---> rxen ---> LORA_RXEN
                           |      PA14  2 |---> txen ---> LORA_TXEN
@@ -75,8 +74,6 @@ void samdBeginBoard()
   pin_txen = 2;
   pin_rxen = 3;
   pin_rst = 6;
-  pin_cts = 30;
-  pin_rts = 38;
   pin_txLED = 31;
   pin_rxLED = A5;
   pin_rssi1LED = A3;
@@ -88,12 +85,6 @@ void samdBeginBoard()
 
   pin_trigger = A0;
   pin_hop_timer = A1;
-
-  //Flow control
-  pinMode(pin_rts, OUTPUT);
-  updateRTS(false); //Disable serial input until the radio starts
-
-  pinMode(pin_cts, INPUT_PULLUP);
 
   //LEDs
   pinMode(pin_rssi1LED, OUTPUT);
@@ -194,14 +185,13 @@ Module * samdRadio()
 //Determine if serial input data is available
 bool samdSerialAvailable()
 {
-  return (Serial.available() || Serial1.available());
+  return (Serial.available());
 }
 
 //Ensure that all serial output data has been sent over USB and via the UART
 void samdSerialFlush()
 {
   Serial.flush();
-  Serial1.flush();
 }
 
 //Read in the serial input data
@@ -210,8 +200,6 @@ uint8_t samdSerialRead()
   byte incoming = 0;
   if (Serial.available())
     incoming = Serial.read();
-  else if (Serial1.available())
-    incoming = Serial1.read();
   return (incoming);
 }
 
@@ -219,7 +207,6 @@ uint8_t samdSerialRead()
 void samdSerialWrite(uint8_t value)
 {
   Serial.write(value);
-  Serial1.write(value);
 }
 
 //Reset the CPU
