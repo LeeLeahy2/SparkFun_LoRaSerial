@@ -390,10 +390,10 @@ typedef struct struct_settings {
   uint32_t serialSpeed = 57600; //Default to 57600bps to match RTK Surveyor default firmware
   uint32_t airSpeed = 4800; //Default to ~523 bytes per second to support RTCM. Overrides spread, bandwidth, and coding
   uint8_t netID = 192; //Both radios must share a network ID
-  uint8_t operatingMode = MODE_POINT_TO_POINT; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
+  uint8_t operatingMode = MODE_VIRTUAL_CIRCUIT; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
   bool encryptData = true; //AES encrypt each packet
   uint8_t encryptionKey[AES_KEY_BYTES] = { 0x37, 0x78, 0x21, 0x41, 0xA6, 0x65, 0x73, 0x4E, 0x44, 0x75, 0x67, 0x2A, 0xE6, 0x30, 0x83, 0x08 };
-  bool dataScrambling = false; //Use IBM Data Whitening to reduce DC bias
+  bool dataScrambling = true; //Use IBM Data Whitening to reduce DC bias
 #if defined(ENABLE_DEVELOPER)
 #define TX_POWER_DB     14
 #else   //ENABLE_DEVELOPER
@@ -431,7 +431,7 @@ typedef struct struct_settings {
   bool printRfData = false; //Print RX and TX data
   bool printPktData = false; //Print data, before encryption and after decryption
   bool verifyRxNetID = true; //Verify RX netID value when not operating in point-to-point mode
-  uint8_t triggerWidth = 25; //Trigger width in microSeconds or multipler for trigger width
+  uint8_t triggerWidth = 10; //Trigger width in microSeconds or multipler for trigger width
   bool triggerWidthIsMultiplier = true; //Use the trigger width as a multiplier
   uint32_t triggerEnable = 0; //Determine which triggers are enabled: 31 - 0
   uint32_t triggerEnable2 = 0; //Determine which triggers are enabled: 63 - 32
@@ -441,9 +441,9 @@ typedef struct struct_settings {
   bool printTimestamp = false; //Print a timestamp: days hours:minutes:seconds.milliseconds
   bool debugDatagrams = false; //Print the datagrams
   uint16_t overheadTime = 10; //ms added to ack and datagram times before ACK timeout occurs
-  bool enableCRC16 = false; //Append CRC-16 to packet, check CRC-16 upon receive
+  bool enableCRC16 = true; //Append CRC-16 to packet, check CRC-16 upon receive
   bool displayRealMillis = false; //true = Display the millis value without offset, false = use offset
-  bool server = false; //Default to being a client, enable server for multipoint, VC and training
+  bool server = true; //Default to being a client, enable server for multipoint, VC and training
   uint8_t clientFindPartnerRetryInterval = 3; //Number of seconds before retransmiting the client FIND_PARTNER
   bool copyDebug = false; //Copy the debug parameters to the training client
   bool copySerial = false; //Copy the serial parameters to the training client
@@ -452,7 +452,7 @@ typedef struct struct_settings {
   bool printLinkUpDown = false; //Print the link up and link down messages
   bool invertCts = false; //Invert the input of CTS
   bool invertRts = false; //Invert the output of RTS
-  uint8_t selectLedUse = LEDS_RSSI; //Select LED use
+  uint8_t selectLedUse = LEDS_VC; //Select LED use
   uint8_t trainingTimeout = 1; //Timeout in minutes to complete the training
   bool debugSerial = false; //Debug the serial input
   bool debugSync = false; //Print clock sync processing
