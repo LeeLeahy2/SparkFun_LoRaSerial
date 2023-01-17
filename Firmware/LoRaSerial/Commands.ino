@@ -1692,7 +1692,10 @@ bool commandSetOrDisplayValue(const COMMAND_ENTRY * command, const char * buffer
       case TYPE_TIME:
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)
-          *(uint32_t *)(command->setting) = settingValue - timestampOffset;
+        {
+          *(uint32_t *)(command->setting) = settingValue;
+          adjustTimeOfDay();
+        }
         break;
       case TYPE_START:
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
@@ -1703,6 +1706,13 @@ bool commandSetOrDisplayValue(const COMMAND_ENTRY * command, const char * buffer
         }
         break;
       case TYPE_DAY:
+        valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
+        if (valid)
+        {
+          *(uint8_t *)(command->setting) = (uint8_t)settingValue;
+          adjustTimeOfDay();
+        }
+        break;
       case TYPE_U8:
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)

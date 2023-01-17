@@ -114,6 +114,7 @@ void updateRadioState()
 
       stopChannelTimer(); //Stop frequency hopping - reset
       clockSyncReceiver = true; //Assume receiving clocks - reset
+      previousTimestampOffset = 0;
 
       configureRadio(); //Setup radio, set freq to channel 0, calculate air times
 
@@ -1031,6 +1032,7 @@ void updateRadioState()
 
       multipointChannelLoops = 0;
       multipointAttempts = 0;
+      previousTimestampOffset = 0;
 
       //Mark start time for uptime calculation
       lastLinkUpTime = millis();
@@ -2744,6 +2746,7 @@ void breakLink()
 
   //Dump the clock synchronization
   dumpClockSynchronization();
+  previousTimestampOffset = 0;
 
   if (settings.printLinkUpDown)
   {
@@ -2908,6 +2911,10 @@ void vcBreakLink(int8_t vcIndex)
     STOP_ACK_TIMER();
     vcSendPcAckNack(vcIndex, false);
   }
+
+  //Reset the timestamp offset if necessary
+  if (vcIndex == VC_SERVER)
+    previousTimestampOffset = 0;
 
   //Get the virtual circuit data structure
   if ((vcIndex >= 0) && (vcIndex != myVc) && (vcIndex < MAX_VC))

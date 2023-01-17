@@ -477,6 +477,7 @@ unsigned long linkDownTimer;
 unsigned long rcvTimeMillis;
 unsigned long xmitTimeMillis;
 long timestampOffset;
+long previousTimestampOffset;
 
 //Transmit control
 uint8_t * endOfTxData;
@@ -715,6 +716,8 @@ void setup()
 void loop()
 {
   petWDT();
+
+  updateTimeOfDay();
 
   updateButton(); //Check if train button is pressed
 
