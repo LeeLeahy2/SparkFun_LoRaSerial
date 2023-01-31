@@ -365,6 +365,7 @@ typedef enum
   LEDS_ALL_ON,      //15: All LEDs on
 
   //Add user LED types from 255 working down
+  LEDS_WEATHER_STATION = 255,
 } LEDS_USE_TYPE;
 
 typedef struct _CLOCK_SYNC_DATA
@@ -390,20 +391,15 @@ typedef struct struct_settings {
   float frequencyMin = 902.0; //MHz
   float frequencyMax = 928.0; //MHz
   float radioBandwidth = 500.0; //kHz 125/250/500 generally. We need 500kHz for higher data.
-  uint32_t txToRxUsec = 657; //TX transactionComplete to RX transactionComplete in microseconds
+  uint32_t txToRxUsec = 119; //TX transactionComplete to RX transactionComplete in microseconds
 
   bool frequencyHop = true; //Hop between frequencies to avoid dwelling on any one channel for too long
   uint8_t numberOfChannels = 50; //Divide the min/max freq band into this number of channels and hop between.
   uint16_t maxDwellTime = 400; //Max number of ms before hopping (if enabled). Useful for configuring radio to be within regulator limits (FCC = 400ms max)
 
-#if (ENABLE_DEVELOPER == true)
-#define TX_POWER_DB     14
-#else   //ENABLE_DEVELOPER
-#define TX_POWER_DB     30
-#endif  //ENABLE_DEVELOPER
-  uint8_t radioBroadcastPower_dbm = TX_POWER_DB; //Transmit power in dBm. Max is 30dBm (1W), min is 14dBm (25mW).
-  uint8_t radioCodingRate = 8; //5 to 8. Higher coding rates ensure less packets dropped.
-  uint8_t radioSpreadFactor = 9; //6 to 12. Use higher factor for longer range.
+  uint8_t radioBroadcastPower_dbm = 14; //Transmit power in dBm. Max is 30dBm (1W), min is 14dBm (25mW).
+  uint8_t radioCodingRate = 7; //5 to 8. Higher coding rates ensure less packets dropped.
+  uint8_t radioSpreadFactor = 7; //6 to 12. Use higher factor for longer range.
   uint8_t radioSyncWord = 18; //18 = 0x12 is default for custom/private networks. Different sync words does *not* guarantee a remote radio will not get packet.
 
   uint16_t radioPreambleLength = 8; //Number of symbols. Different lengths does *not* guarantee a remote radio privacy. 8 to 11 works. 8 to 15 drops some. 8 to 20 is silent.
@@ -413,17 +409,17 @@ typedef struct struct_settings {
   //Radio protocol parameters
   //----------------------------------------
 
-  uint8_t operatingMode = MODE_POINT_TO_POINT; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
+  uint8_t operatingMode = MODE_VIRTUAL_CIRCUIT; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
 
-  uint8_t selectLedUse = LEDS_RSSI; //Select LED use
-  bool server = false; //Default to being a client, enable server for multipoint, VC and training
+  uint8_t selectLedUse = LEDS_VC; //Select LED use
+  bool server = true; //Default to being a client, enable server for multipoint, VC and training
   uint8_t netID = 192; //Both radios must share a network ID
   bool verifyRxNetID = true; //Verify RX netID value when not operating in point-to-point mode
 
   uint8_t encryptionKey[AES_KEY_BYTES] = { 0x37, 0x78, 0x21, 0x41, 0xA6, 0x65, 0x73, 0x4E, 0x44, 0x75, 0x67, 0x2A, 0xE6, 0x30, 0x83, 0x08 };
 
   bool encryptData = true; //AES encrypt each packet
-  bool dataScrambling = false; //Use IBM Data Whitening to reduce DC bias
+  bool dataScrambling = true; //Use IBM Data Whitening to reduce DC bias
   bool enableCRC16 = true; //Append CRC-16 to packet, check CRC-16 upon receive
   uint8_t framesToYield = 3; //If remote requests it, supress transmission for this number of max packet frames
 
@@ -449,12 +445,7 @@ typedef struct struct_settings {
   uint16_t rtsOffBytes = 32; //Number of free bytes in serialReceiveBuffer when RTS is deasserted
   uint16_t rtsOnBytes = RTS_ON_BYTES; //Number of free bytes in serialReceiveBuffer when RTS is asserted
 
-#if (ENABLE_DEVELOPER == true)
-#define WAIT_SERIAL_DEFAULT     true
-#else   //ENABLE_DEVELOPER
-#define WAIT_SERIAL_DEFAULT     false
-#endif  //ENABLE_DEVELOPER
-  bool usbSerialWait = WAIT_SERIAL_DEFAULT; //Wait for USB serial initialization
+  bool usbSerialWait = false; //Wait for USB serial initialization
 
   //----------------------------------------
   //Training parameters
@@ -472,7 +463,7 @@ typedef struct struct_settings {
   //----------------------------------------
 
   bool copyTriggers = false; //Copy the trigger parameters to the training client
-  uint8_t triggerWidth = 25; //Trigger width in microSeconds or multipler for trigger width
+  uint8_t triggerWidth = 10; //Trigger width in microSeconds or multipler for trigger width
   bool triggerWidthIsMultiplier = true; //Use the trigger width as a multiplier
 
   uint32_t triggerEnable = 0; //Determine which triggers are enabled: 31 - 0

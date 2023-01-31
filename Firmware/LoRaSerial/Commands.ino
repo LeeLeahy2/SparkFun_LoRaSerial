@@ -36,6 +36,7 @@ bool commandAT(const char * commandString)
 {
   uint32_t delayMillis;
   long deltaMillis;
+  int entries;
   uint8_t id[UNIQUE_ID_BYTES];
   const char * string;
   unsigned long timer;
@@ -150,7 +151,6 @@ bool commandAT(const char * commandString)
 
       case ('I'): //ATI
         //Shows the radio version
-        systemPrint("SparkFun LoRaSerial ");
         systemPrint(platformPrefix);
         systemPrint(" v");
         systemPrint(FIRMWARE_VERSION_MAJOR);
@@ -233,6 +233,15 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI32 - Dump the NVM unique ID table");
         return true;
 
+        //Add user commands after this line
+        systemPrintln("  ATI93 - Display the total wind gauge count");
+        systemPrintln("  ATI94 - Display wind counts");
+        systemPrintln("  ATI95 - Display wind gauge values");
+        systemPrintln("  ATI96 - Display the total rain gauge count");
+        systemPrintln("  ATI97 - Display rain counts");
+        systemPrintln("  ATI98 - Display rain gauge values");
+        systemPrintln("  ATI99 - Product Description");
+        break;
       case ('0'): //ATI0 - Show user settable parameters
         displayParameters(0, true);
         return true;
@@ -795,6 +804,76 @@ bool commandAT(const char * commandString)
 
       case ('1'): //ATI51 - Display the SX1276 registers
         printSX1276Registers();
+        return true;
+    }
+  }
+
+  //User ATI9x commands
+  else if ((commandString[2] == 'I') && (commandString[3] == '9') && (commandLength == 5))
+  {
+    switch (commandString[4])
+    {
+      default:
+        return false;
+
+      case ('3'): //ATI93 - Display the total wind gauge count
+        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        {
+          systemWrite(START_OF_VC_SERIAL);  //Start byte
+          systemWrite(3 + 8 + 2);         //Length
+          systemWrite(PC_COMMAND);        //Destination
+          systemWrite(VC_COMMAND);        //Source
+        }
+        systemPrint((int)windCountTotal, HEX);
+        systemPrintln();
+        return true;
+
+      case ('4'): //ATI94 - Display wind counts
+        entries = sizeof(windCount) / sizeof(windCount[0]);
+        for (int i = 0; i < entries; i++)
+        {
+          systemPrint(windCount[i]);
+          if ((((i + 1) % 10) == 0) || ((i + 1) == entries))
+            systemPrintln();
+          else
+            systemPrint(", ");
+        }
+        return true;
+
+      case ('5'): //ATI95 - Display wind gauge values
+        displayWindSpeed();
+        return true;
+
+      case ('6'): //ATI96 - Display the total rain gauge count
+        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        {
+          systemWrite(START_OF_VC_SERIAL);//Start byte
+          systemWrite(3 + 8 + 2);         //Length
+          systemWrite(PC_COMMAND);        //Destination
+          systemWrite(VC_COMMAND);        //Source
+        }
+        systemPrint((int)rainCountTotal, HEX);
+        systemPrintln();
+        return true;
+
+      case ('7'): //ATI97 - Display rain counts
+        entries = sizeof(rainCount) / sizeof(rainCount[0]);
+        for (int i = 0; i < entries; i++)
+        {
+          systemPrint(rainCount[i]);
+          if ((((i + 1) % 10) == 0) || ((i + 1) == entries))
+            systemPrintln();
+          else
+            systemPrint(", ");
+        }
+        return true;
+
+      case ('8'): //ATI98 - Display rain gauge values
+        displayRainFall();
+        return true;
+
+      case ('9'): //ATI99 - Product description
+        systemPrintln("Makakilo Hale II Sprinkler Server");
         return true;
     }
   }

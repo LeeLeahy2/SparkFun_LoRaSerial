@@ -8,10 +8,14 @@
 # Source files
 ##########
 
+EXECUTABLES += Pipe_1
 EXECUTABLES += Slow_Read
+EXECUTABLES += SprinklerServer
 EXECUTABLES += VcServerTest
 
-INCLUDES = settings.h ../LoRaSerial_Firmware/Virtual_Circuit_Protocol.h
+INCLUDES  = settings.h
+INCLUDES += ../LoRaSerial/Virtual_Circuit_Protocol.h
+INCLUDES += ../LoRaSerial/Weather_Station_Protocol.h
 
 COMMON_LIB = Common_Lib.a
 
@@ -51,8 +55,15 @@ $(COMMON_LIB): $(LIB_OBJS)
 # Build the executables
 ##########
 
+Pipe_1: Pipe_1.c $(COMMON_LIB)
+	$(CC) -o $@ $^
+	chmod o=rx $@
+
 Slow_Read: Slow_Read.c $(COMMON_LIB)
 	$(CC) -o $@ $^
+
+SprinklerServer: SprinklerServer.c WeatherStation.c
+	$(CC) -o $@ $^ -lmariadbclient
 
 VcServerTest: VcServerTest.c $(COMMON_LIB)
 	$(CC) -o $@ $^
