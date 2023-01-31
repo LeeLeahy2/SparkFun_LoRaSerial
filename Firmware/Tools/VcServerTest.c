@@ -1,11 +1,27 @@
+/**********************************************************************
+* February 20th, 2023
+* SparkFun Electronics
+* Lee Leahy
+*
+* VcServerTest.c
+*
+* Test program that uses the virtual circuit interface to the LoRaSerial
+* radios.
+**********************************************************************/
+
 #define ADD_VC_STATE_NAMES_TABLE
 #include "settings.h"
 
+#ifndef TIMEOUT_USEC
+#define TIMEOUT_USEC          1000
+#endif  // TIMEOUT_USEC
+
 #define BUFFER_SIZE           2048
 #define INPUT_BUFFER_SIZE     BUFFER_SIZE
-#define MAX_MESSAGE_SIZE      32
+#define MAX_MESSAGE_SIZE      256
 #define STDIN                 0
 #define STDOUT                1
+#define STDERR                  2
 
 #define BREAK_LINKS_COMMAND   "atb"
 #define GET_MY_VC_ADDRESS     "atI11"
@@ -32,14 +48,54 @@ typedef struct _VIRTUAL_CIRCUIT
 
 bool commandStatus;
 bool findMyVc;
-int myVc = VC_UNASSIGNED;
-int remoteVc;
 uint8_t inputBuffer[INPUT_BUFFER_SIZE];
+int myVc = VC_UNASSIGNED;
 uint8_t outputBuffer[VC_SERIAL_HEADER_BYTES + BUFFER_SIZE];
+uint8_t remoteCommandVc;
+int remoteVc;
 int timeoutCount;
 VIRTUAL_CIRCUIT virtualCircuitList[MAX_VC];
 volatile bool waitingForCommandComplete;
-uint8_t remoteCommandVc;
+
+void dumpBuffer(uint8_t * data, int length)
+{
+  char byte;
+  int bytes;
+  uint8_t * dataEnd;
+  uint8_t * dataStart;
+  const int displayWidth = 16;
+  int index;
+
+  dataStart = data;
+  dataEnd = &data[length];
+  while (data < dataEnd)
+  {
+    // Display the offset
+    printf("    0x%02x: ", (unsigned int)(data - dataStart));
+
+    // Determine the number of bytes to display
+    bytes = dataEnd - data;
+    if (bytes > displayWidth)
+      bytes = displayWidth;
+
+    // Display the data bytes in hex
+    for (index = 0; index < bytes; index++)
+      printf(" %02x", *data++);
+
+    // Space over to the ASCII display
+    for (; index < displayWidth; index++)
+      printf("   ");
+    printf("  ");
+
+    // Display the ASCII bytes
+    data -= bytes;
+    for (index = 0; index < bytes; index++) {
+      byte = *data++;
+      printf("%c", ((byte < ' ') || (byte >= 0x7f)) ? '.' : byte);
+    }
+    printf("\n");
+  }
+}
 
 int cmdToRadio(uint8_t * buffer, int length)
 {
@@ -560,11 +616,7 @@ int radioToHost()
   return status;
 }
 
-int
-main (
-  int argc,
-  char ** argv
-)
+int main(int argc, char **argv)
 {
   bool breakLinks;
   fd_set currentfds;
@@ -669,7 +721,7 @@ main (
     {
       //Set the timeout
       timeout.tv_sec = 0;
-      timeout.tv_usec = 1000;
+      timeout.tv_usec = TIMEOUT_USEC;
 
       //Wait for receive data or timeout
       memcpy((void *)&currentfds, (void *)&readfds, sizeof(readfds));
@@ -679,18 +731,6 @@ main (
         perror("ERROR: select call failed!");
         status = errno;
         break;
-      }
-
-      //Check for timeout
-      if ((numfds == 0) && (timeoutCount++ >= 1000))
-      {
-        timeoutCount = 0;
-        if (myVc == VC_UNASSIGNED)
-        {
-          //Get myVc address
-          findMyVc = true;
-          cmdToRadio((uint8_t *)GET_MY_VC_ADDRESS, strlen(GET_MY_VC_ADDRESS));
-        }
       }
 
       //Determine if console input is available
@@ -709,7 +749,23 @@ main (
         if (status)
           break;
       }
+
+      //Check for timeout
+      if ((numfds == 0) && (timeoutCount++ >= 1000))
+      {
+        timeoutCount = 0;
+        if (myVc == VC_UNASSIGNED)
+        {
+          //Get myVc address
+          findMyVc = true;
+          cmdToRadio((uint8_t *)GET_MY_VC_ADDRESS, strlen(GET_MY_VC_ADDRESS));
+        }
+      }
+
     }
   } while (0);
+
+  //Done with the radio
+  close(radio);
   return status;
 }
