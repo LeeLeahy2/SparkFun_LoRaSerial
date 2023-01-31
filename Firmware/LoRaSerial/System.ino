@@ -719,6 +719,7 @@ void blinkRadioRssiLed()
     case LEDS_MULTIPOINT:
     case LEDS_P2P:
     case LEDS_RADIO_USE:
+    case LEDS_SPRINKLER_CONTROLLER:
     case LEDS_VC:
       //Check for the start of a new pulse
       if ((currentMillis - ledPreviousRssiMillis) >= LED_MAX_PULSE_WIDTH)
@@ -806,6 +807,7 @@ void blinkRadioRxLed(bool on)
     case LEDS_MULTIPOINT:
     case LEDS_P2P:
     case LEDS_RADIO_USE:
+    case LEDS_SPRINKLER_CONTROLLER:
     case LEDS_VC:
       if (on)
         digitalWrite(GREEN_LED_1, LED_ON);
@@ -830,6 +832,7 @@ void blinkRadioTxLed(bool on)
     case LEDS_MULTIPOINT:
     case LEDS_P2P:
     case LEDS_RADIO_USE:
+    case LEDS_SPRINKLER_CONTROLLER:
     case LEDS_VC:
       if (on)
         digitalWrite(GREEN_LED_4, LED_ON);
@@ -907,6 +910,14 @@ void blinkHeartbeatLed(bool on)
 
   switch (settings.selectLedUse)
   {
+    case LEDS_SPRINKLER_CONTROLLER:
+      if (settings.useFlowLed)
+        break;
+      // Fall through
+      //        |
+      //        |
+      //        V
+
     case LEDS_MULTIPOINT:
     case LEDS_P2P:
     case LEDS_VC:
@@ -928,6 +939,7 @@ void blinkChannelHopLed(bool on)
   {
     case LEDS_MULTIPOINT:
     case LEDS_P2P:
+    case LEDS_SPRINKLER_CONTROLLER:
     case LEDS_VC:
       if (on)
         digitalWrite(YELLOW_LED, LED_ON);
@@ -969,6 +981,28 @@ void blinkErrorLed(const char * errorMessage)
   }
 }
 
+//Blink the flow LED
+void blinkFlowLed(bool on)
+{
+  static unsigned long ledMillis;
+
+  switch (settings.selectLedUse)
+  {
+    case LEDS_SPRINKLER_CONTROLLER:
+      if (settings.useFlowLed)
+      {
+        if (on)
+        {
+          digitalWrite(BLUE_LED, HIGH);
+          ledMillis = millis();
+        }
+        else if ((millis() - ledMillis) >= FLOW_BLINK_MILLIS)
+          digitalWrite(BLUE_LED, LOW);
+      }
+      break;
+  }
+}
+
 //Display the multi-point LED pattern
 void multiPointLeds()
 {
@@ -985,8 +1019,7 @@ void multiPointLeds()
   blinkRadioRssiLed();
 
   //Update the hop LED
-  if ((millis() - radioCallHistory[RADIO_CALL_hopChannel]) >= RADIO_USE_BLINK_MILLIS)
-    digitalWrite(YELLOW_LED, LED_OFF);
+  blinkChannelHopLed(false);
 
   //Update the HEARTBEAT LED
   blinkHeartbeatLed(false);
@@ -1006,8 +1039,7 @@ void p2pLeds()
   //Leave the LINK LED (GREEN_LED_2) off
 
   //Update the hop LED
-  if ((millis() - radioCallHistory[RADIO_CALL_hopChannel]) >= RADIO_USE_BLINK_MILLIS)
-    digitalWrite(YELLOW_LED, LED_OFF);
+  blinkChannelHopLed(false);
 
   //Update the HEARTBEAT LED
   blinkHeartbeatLed(false);
@@ -1049,11 +1081,51 @@ void vcLeds()
   //Serial RX displayed on the LINK LED (GREEN_LED_2) by blinkSerialRxLed
 
   //Update the hop LED
-  if ((millis() - radioCallHistory[RADIO_CALL_hopChannel]) >= RADIO_USE_BLINK_MILLIS)
-    digitalWrite(YELLOW_LED, LED_OFF);
+  blinkChannelHopLed(false);
 
   //Update the HEARTBEAT LED
   blinkHeartbeatLed(false);
+}
+
+//Display the sprinkler controller LED pattern
+void sprinklerControllerLeds()
+{
+  uint32_t currentMillis;
+  static uint32_t blinkSyncMillis;
+
+  //Turn off the RX LED to end the blink
+  blinkRadioRxLed(false);
+
+  //Turn off the TX LED to end the blink
+  blinkRadioTxLed(false);
+
+  //Pulse width modulate the RSSI LED (GREEN_LED_3)
+  currentMillis = millis();
+  if (virtualCircuitList[VC_SERVER].vcState)
+    blinkRadioRssiLed();
+
+  //Turn on the RSSI LED
+  else if (((currentMillis - blinkSyncMillis) >= (VC_SYNC_BLINK_RATE >> 1))
+           && (digitalRead(GREEN_LED_3) == LED_OFF))
+    digitalWrite(GREEN_LED_3, LED_ON);
+
+  //Turn off the RSSI LED
+  else if ((!virtualCircuitList[VC_SERVER].vcState)
+           && (((currentMillis - blinkSyncMillis) >= VC_SYNC_BLINK_RATE))
+           && (digitalRead(GREEN_LED_3) == LED_ON))
+  {
+    digitalWrite(GREEN_LED_3, LED_OFF);
+    blinkSyncMillis = currentMillis;
+  }
+
+  //Serial RX displayed on the LINK LED (GREEN_LED_2) by blinkSerialRxLed
+
+  //Update the hop (yellow) LED
+  blinkChannelHopLed(false);
+
+  //Update the blue LED
+  blinkHeartbeatLed(false);
+  blinkFlowLed(false);
 }
 
 //Update the cylon LEDs
@@ -1202,6 +1274,11 @@ void updateLeds()
       digitalWrite(BLUE_LED, LED_ON);
       digitalWrite(YELLOW_LED, LED_ON);
       break;
+
+    //Display the sprinkler controller LEDs
+    case LEDS_SPRINKLER_CONTROLLER:
+      sprinklerControllerLeds();
+      break;
   }
 }
 
@@ -1302,4 +1379,38 @@ void verifyTables()
   //Handle the error
   if (errorMessage)
     waitForever(errorMessage);
+}
+
+//Split time into days, hours, minutes, seconds and milliseconds
+void getTime(uint32_t timeInMillis, uint8_t * days, uint8_t * hours, uint8_t * minutes, uint8_t * seconds, uint16_t * milliseconds)
+{
+  uint32_t value;
+
+  //Determine the day number
+  value = timeInMillis / MILLISECONDS_IN_A_DAY;
+  if (days)
+    *days = value;
+  timeInMillis -= value * MILLISECONDS_IN_A_DAY;
+
+  //Determine the hour value
+  value = timeInMillis / MILLISECONDS_IN_AN_HOUR;
+  if (hours)
+    *hours = value;
+  timeInMillis -= value * MILLISECONDS_IN_AN_HOUR;
+
+  //Determine the minute value
+  value = timeInMillis / MILLISECONDS_IN_A_MINUTE;
+  if (minutes)
+    *minutes = value;
+  timeInMillis -= value * MILLISECONDS_IN_A_MINUTE;
+
+  //Determine the second value
+  value = timeInMillis / MILLISECONDS_IN_A_SECOND;
+  if (seconds)
+    *seconds = value;
+  timeInMillis -= value * MILLISECONDS_IN_A_SECOND;
+
+  //What remains is the millisecond value
+  if (milliseconds)
+    *milliseconds = timeInMillis;
 }

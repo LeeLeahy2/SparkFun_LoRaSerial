@@ -8,6 +8,8 @@ WDTZero myWatchDog;
 #define NVM_ERASE_VALUE         0xff
 #define NVM_UNIQUE_ID_OFFSET    (EEPROM_EMULATION_SIZE - (MAX_VC * UNIQUE_ID_BYTES))
 
+void flowSensorIsr();
+
 /*
   Data flow
                    +--------------+
@@ -21,8 +23,10 @@ WDTZero myWatchDog;
                    +--------------+                                |
                    |     SAMD     |                                |
                    |              |                                |
-    TTL Serial <-->| Serial1      |       +--------------+         V
-                   |          SPI |<----->| SX1276 Radio |<---> Antenna
+                   |  Sprinkler   |                                |
+                   |  Controller  |                                |
+                   |              |       +--------------+         V
+        Debug      |          SPI |<----->| SX1276 Radio |<---> Antenna
     USB Serial <-->| Serial       |       +--------------+
                    +--------------+
 
@@ -45,10 +49,10 @@ WDTZero myWatchDog;
                           |      PA16 11 |---> MOSI ---> SPI_PICO
                           |      PA19 12 |<--- MISO ---> SPI_POCI
                           |              |
-    RTS-0 <------ rts <---| 38 PA13      |
-    TX-0 <------- tx <----| 0  PA10      |
-    RX-I_LV <---- rx ---->| 1  PA11      |
-    CTS-I_LV <--- cts --->| 30 PB22      |
+                          | 38 PA13      |
+                          | 0  PA10      |
+                          | 1  PA11      |
+    Flow Sensor --------->| 30 PB22      |
                           |              |
                           |      PA09  3 |---> rxen ---> LORA_RXEN
                           |      PA14  2 |---> txen ---> LORA_TXEN
@@ -63,6 +67,8 @@ WDTZero myWatchDog;
                           +--------------+
 */
 
+const int pin_FlowSensor = 30; //CTS
+
 //Initialize the LoRaSerial board
 void samdBeginBoard()
 {
@@ -75,8 +81,6 @@ void samdBeginBoard()
   pin_txen = 2;
   pin_rxen = 3;
   pin_rst = 6;
-  pin_cts = 30;
-  pin_rts = 38;
   pin_blue_LED = 31;
   pin_yellow_LED = A5;
   pin_green_1_LED = A3;
@@ -88,12 +92,6 @@ void samdBeginBoard()
 
   pin_trigger = A0;
   pin_hop_timer = A1;
-
-  //Flow control
-  pinMode(pin_rts, OUTPUT);
-  updateRTS(false); //Disable serial input until the radio starts
-
-  pinMode(pin_cts, INPUT_PULLUP);
 
   //LEDs
   pinMode(pin_green_1_LED, OUTPUT);
@@ -156,8 +154,6 @@ void samdBeginSerial(uint16_t serialSpeed)
   if (settings.usbSerialWait)
     //Wait for serial to come online for debug printing
     while (!Serial);
-
-  Serial1.begin(serialSpeed);
 }
 
 //Initialize the watch dog timer
@@ -170,6 +166,7 @@ void samdBeginWDT()
 //Initilaize the EEPROM controller or simulation
 void samdEepromBegin()
 {
+  online.eeprom = true;
 }
 
 //Write any remaining data to EEPROM
@@ -194,14 +191,13 @@ Module * samdRadio()
 //Determine if serial input data is available
 bool samdSerialAvailable()
 {
-  return (Serial.available() || Serial1.available());
+  return (Serial.available());
 }
 
 //Ensure that all serial output data has been sent over USB and via the UART
 void samdSerialFlush()
 {
   Serial.flush();
-  Serial1.flush();
 }
 
 //Read in the serial input data
@@ -210,8 +206,6 @@ uint8_t samdSerialRead()
   byte incoming = 0;
   if (Serial.available())
     incoming = Serial.read();
-  else if (Serial1.available())
-    incoming = Serial1.read();
   return (incoming);
 }
 
@@ -219,7 +213,6 @@ uint8_t samdSerialRead()
 void samdSerialWrite(uint8_t value)
 {
   Serial.write(value);
-  Serial1.write(value);
 }
 
 //Reset the CPU

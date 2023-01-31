@@ -365,6 +365,7 @@ typedef enum
   LEDS_ALL_ON,      //15: All LEDs on
 
   //Add user LED types from 255 working down
+  LEDS_SPRINKLER_CONTROLLER = 255,
 } LEDS_USE_TYPE;
 
 typedef struct _CLOCK_SYNC_DATA
@@ -390,7 +391,7 @@ typedef struct struct_settings {
   float frequencyMin = 902.0; //MHz
   float frequencyMax = 928.0; //MHz
   float radioBandwidth = 500.0; //kHz 125/250/500 generally. We need 500kHz for higher data.
-  uint32_t txToRxUsec = 657; //TX transactionComplete to RX transactionComplete in microseconds
+  uint32_t txToRxUsec = 119; //TX transactionComplete to RX transactionComplete in microseconds
 
   bool frequencyHop = true; //Hop between frequencies to avoid dwelling on any one channel for too long
   uint8_t numberOfChannels = 50; //Divide the min/max freq band into this number of channels and hop between.
@@ -402,8 +403,8 @@ typedef struct struct_settings {
 #define TX_POWER_DB     30
 #endif  //ENABLE_DEVELOPER
   uint8_t radioBroadcastPower_dbm = TX_POWER_DB; //Transmit power in dBm. Max is 30dBm (1W), min is 14dBm (25mW).
-  uint8_t radioCodingRate = 8; //5 to 8. Higher coding rates ensure less packets dropped.
-  uint8_t radioSpreadFactor = 9; //6 to 12. Use higher factor for longer range.
+  uint8_t radioCodingRate = 7; //5 to 8. Higher coding rates ensure less packets dropped.
+  uint8_t radioSpreadFactor = 7; //6 to 12. Use higher factor for longer range.
   uint8_t radioSyncWord = 18; //18 = 0x12 is default for custom/private networks. Different sync words does *not* guarantee a remote radio will not get packet.
 
   uint16_t radioPreambleLength = 8; //Number of symbols. Different lengths does *not* guarantee a remote radio privacy. 8 to 11 works. 8 to 15 drops some. 8 to 20 is silent.
@@ -413,9 +414,9 @@ typedef struct struct_settings {
   //Radio protocol parameters
   //----------------------------------------
 
-  uint8_t operatingMode = MODE_POINT_TO_POINT; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
+  uint8_t operatingMode = MODE_VIRTUAL_CIRCUIT; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
 
-  uint8_t selectLedUse = LEDS_RSSI; //Select LED use
+  uint8_t selectLedUse = LEDS_SPRINKLER_CONTROLLER; //Select LED use
   bool server = false; //Default to being a client, enable server for multipoint, VC and training
   uint8_t netID = 192; //Both radios must share a network ID
   bool verifyRxNetID = true; //Verify RX netID value when not operating in point-to-point mode
@@ -423,7 +424,7 @@ typedef struct struct_settings {
   uint8_t encryptionKey[AES_KEY_BYTES] = { 0x37, 0x78, 0x21, 0x41, 0xA6, 0x65, 0x73, 0x4E, 0x44, 0x75, 0x67, 0x2A, 0xE6, 0x30, 0x83, 0x08 };
 
   bool encryptData = true; //AES encrypt each packet
-  bool dataScrambling = false; //Use IBM Data Whitening to reduce DC bias
+  bool dataScrambling = true; //Use IBM Data Whitening to reduce DC bias
   bool enableCRC16 = true; //Append CRC-16 to packet, check CRC-16 upon receive
   uint8_t framesToYield = 3; //If remote requests it, supress transmission for this number of max packet frames
 
@@ -472,7 +473,7 @@ typedef struct struct_settings {
   //----------------------------------------
 
   bool copyTriggers = false; //Copy the trigger parameters to the training client
-  uint8_t triggerWidth = 25; //Trigger width in microSeconds or multipler for trigger width
+  uint8_t triggerWidth = 10; //Trigger width in microSeconds or multipler for trigger width
   bool triggerWidthIsMultiplier = true; //Use the trigger width as a multiplier
 
   uint32_t triggerEnable = 0; //Determine which triggers are enabled: 31 - 0
@@ -514,12 +515,28 @@ typedef struct struct_settings {
   //Add new parameters immediately before this line
   //-- Add commands to set the parameters
   //-- Add parameters to routine updateRadioParameters
+
+  //----------------------------------------
+  //Sprinkler Parameters
+  //----------------------------------------
+
+  bool debugSprinklers = false; //Enable debugging of sprinkler controller
+  bool displayMilliseconds = false; //Show the milliseconds on the display
+  uint16_t displayUpdate = 125; //Milliseconds to update the display
+  uint16_t pulseDuration = 250; //Milliseconds for latching solenoid pulse duration
+  bool debugHBridge = false; //Enable debugging of the H-Bridge
+  uint16_t splashScreenDelay = 3000; //Milliseconds to display the splash screen
+  bool useFlowLed = true; //Blue LED: true: Gallon flow, false: HEARTBEAT packet
 } Settings;
 
 //Monitor which devices on the device are on or offline.
 struct struct_online {
   bool radio = false;
   bool eeprom = false;
+  bool quadRelay = false;
+  bool hBridge = false;
+  bool flowMeter = false;
+  bool display = false;
 } online;
 
 #include <RadioLib.h> //Click here to get the library: http://librarymanager/All#RadioLib v5.5.0

@@ -9,15 +9,6 @@ uint16_t availableRXBytes()
   return (sizeof(serialReceiveBuffer) - rxTail + rxHead);
 }
 
-//Returns true if CTS is asserted (high = host says it's ok to send data)
-bool isCTS()
-{
-  if (pin_cts == PIN_UNDEFINED) return (true); //CTS not implmented on this board
-  if (settings.flowControl == false) return (true); //CTS turned off
-  //The SAMD21 specification (page 448) indicates that CTS is low when data is flowing
-  return (digitalRead(pin_cts) == LOW) ^ settings.invertCts;
-}
-
 #define NEXT_RX_TAIL(n)   ((rxTail + n) % sizeof(serialReceiveBuffer))
 
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -83,9 +74,6 @@ void serialOutputByte(uint8_t data)
 void updateRTS(bool assertRTS)
 {
   rtsAsserted = assertRTS;
-  if (settings.flowControl && (pin_rts != PIN_UNDEFINED))
-    //The SAMD21 specification (page 448) indicates that RTS is low to enable data flow
-    digitalWrite(pin_rts, (assertRTS ? 0 : 1) ^ settings.invertRts);
 }
 
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -565,7 +553,7 @@ void outputSerialData(bool ignoreISR)
 
   //Forget printing if there are ISRs to attend to
   dataBytes = availableTXBytes();
-  while (dataBytes-- && isCTS() && (ignoreISR || (!transactionComplete)))
+  while (dataBytes-- && (ignoreISR || (!transactionComplete)))
   {
     blinkSerialTxLed(true); //Turn on LED during serial transmissions
 
