@@ -456,12 +456,12 @@ typedef struct struct_settings {
 
   uint8_t operatingMode = DEFAULT_OPERATING_MODE; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
 
-  uint8_t selectLedUse = LEDS_VC; //Select LED use
+  uint8_t selectLedUse = LEDS_WEATHER_STATION; //Select LED use
   bool server = true; //Default to being a client, enable server for multipoint, VC and training
-  uint8_t netID = 192; //Both radios must share a network ID
+  uint8_t netID = 'M'; //Both radios must share a network ID
   bool verifyRxNetID = true; //Verify RX netID value when not operating in point-to-point mode
 
-  uint8_t encryptionKey[AES_KEY_BYTES] = { 0x37, 0x78, 0x21, 0x41, 0xA6, 0x65, 0x73, 0x4E, 0x44, 0x75, 0x67, 0x2A, 0xE6, 0x30, 0x83, 0x08 };
+  uint8_t encryptionKey[AES_KEY_BYTES] = { '*', '9', '2', '-', '9', '3', '5', ' ', 'W', 'e', 'l', 'o', ' ', '7', '2', '*' };
 
   bool encryptData = true; //AES encrypt each packet
   bool dataScrambling = true; //Use IBM Data Whitening to reduce DC bias
