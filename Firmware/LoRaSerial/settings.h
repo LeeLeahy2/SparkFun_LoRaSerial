@@ -442,7 +442,7 @@ typedef struct struct_settings {
   uint8_t numberOfChannels = 50; //Divide the min/max freq band into this number of channels and hop between.
   uint16_t maxDwellTime = 400; //Max number of ms before hopping (if enabled). Useful for configuring radio to be within regulator limits (FCC = 400ms max)
 
-  uint8_t radioBroadcastPower_dbm = 14; //Transmit power in dBm. Max is 30dBm (1W), min is 14dBm (25mW).
+  uint8_t radioBroadcastPower_dbm = 30; //Transmit power in dBm. Max is 30dBm (1W), min is 14dBm (25mW).
   uint8_t radioCodingRate = 0;
   uint8_t radioSpreadFactor = 0;
   uint8_t radioSyncWord = 18; //18 = 0x12 is default for custom/private networks. Different sync words does *not* guarantee a remote radio will not get packet.
@@ -456,12 +456,12 @@ typedef struct struct_settings {
 
   uint8_t operatingMode = DEFAULT_OPERATING_MODE; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
 
-  uint8_t selectLedUse = LEDS_VC; //Select LED use
+  uint8_t selectLedUse = LEDS_WEATHER_STATION; //Select LED use
   bool server = true; //Default to being a client, enable server for multipoint, VC and training
-  uint8_t netID = 192; //Both radios must share a network ID
+  uint8_t netID = 'M'; //Both radios must share a network ID
   bool verifyRxNetID = true; //Verify RX netID value when not operating in point-to-point mode
 
-  uint8_t encryptionKey[AES_KEY_BYTES] = { 0x37, 0x78, 0x21, 0x41, 0xA6, 0x65, 0x73, 0x4E, 0x44, 0x75, 0x67, 0x2A, 0xE6, 0x30, 0x83, 0x08 };
+  uint8_t encryptionKey[AES_KEY_BYTES] = { '*', '9', '2', '-', '9', '3', '5', ' ', 'W', 'e', 'l', 'o', ' ', '7', '2', '*' };
 
   bool encryptData = true; //AES encrypt each packet
   bool dataScrambling = true; //Use IBM Data Whitening to reduce DC bias
