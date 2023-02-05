@@ -1,0 +1,485 @@
+<html>
+  <head>
+    <title>Sprinkler Controller</title>
+  </head>
+  <body>
+<h1>Sprinkler Controller Goals</h1>
+<p>
+The goal is to have a web-site where the property manager can update the schedule of
+sprinkler controllers on the property.  Additionally, a
+<a target="_blank" href="https://www.sparkfun.com/products/15901">rain gauge</a>
+monitors the rain and adjusts the schedules to account for any rain fall.  Condo owners
+are able to view the web-site to see the
+<a target="_blank" href="https://aoao-mh2.org/Rain_Graph.php">rain</a> amounts,
+<a target="_blank" href="https://aoao-mh2.org/Wind_Graph.php">wind</a> levels,
+and monitor the sprinkler system performance.
+</p>
+
+<!--
+================================================================================
+-->
+<h1>Rain on 2023-02-04</h1>
+<a target="_blank" href="Rain_Graph.jpeg"><img width=600 src="Rain_Graph.jpeg"></a>
+<br>
+
+<!--
+================================================================================
+-->
+<h1>Wind on 2023-02-01</h1>
+<a target="_blank" href="Wind_Graph.jpeg"><img width=600 src="Wind_Graph.jpeg"></a>
+<br>
+
+<!--
+================================================================================
+-->
+<h1>Sprinkler Controller Functionality</h1>
+<ul>
+  <li><a target="_blank" href="20230202_202513.jpg"><img width=600 src="20230202_202513.jpg"></a></li>
+</ul>
+
+<p>
+The sprinkler controller implements the following:
+<ul>
+  <li>Controller enable / disable</li>
+  <li>Set day of week</li>
+  <li>Set time of day</li>
+  <li>Four (4) zones</li>
+  <li>Solenoid type selection: AC (powered) or DC latching (pulse on/off)</li>
+  <li>Pulse solenoid</li>
+  <li>Manual zone on / off</li>
+  <li>Weekly schedule with the following entries for each day:
+    <ul>
+      <li>Start time specified in milliseconds</li>
+      <li>Zone Duration - For each zone, the number of milliseconds to be on (watering)</li>
+    </ul>
+  </li>
+  <li>Subtracts the manual zone on time from that zone's watering schedule for the current day</li>
+</ul>
+
+<!--
+================================================================================
+-->
+<h1>LoRaSerial LEDs</h1>
+The LoRaSerial has a number of Light Emitting Diodes (LEDs) which are described below:
+<ul>
+  <li>Red LED: Power applied when lit</li>
+  <li>Blue LED: Sprinkler controller received a HEARTBEAT frame from the sprinkler server
+      over the radio link</li>
+  <li>Green LEDs are numbered from left to right as 1, 2, 3, 4
+    <ul>
+      <li>Green 1: Pulsed on when data is received over the radio link</li>
+      <li>Green 2: Not used</li>
+      <li>Green 3: Pulse width modulated with the RSSI level</li>
+      <li>Green 4: Pulsed on with data is transmitted over the radio link</li>
+    </ul>
+  </li>
+</ul>
+
+<!--
+================================================================================
+-->
+<h1>Display (Optional)</h1>
+The optional display (64 x 48 pixels) summerizes the sprinkler controller behavior.
+It contains the following data:
+<ul>
+  <li>Letter for day of week: M-Monday, T-Tuesday, W-Wednesday, R-Thursday, F-Friday,
+      S-Saturday, U-Sunday</li>
+  <li>Time of day in 24 hour format</li>
+  <li>A line containing the zone numbers</li>
+  <li>Under the zone number a symbol when the zone is active:
+    <ul>
+      <li>Up arrow - pulse turing on the zone,</li>
+      <li>Drop - Indicates that the zone on (watering),</li>
+      <li>Down arrow - pulse turning off the zone</li>
+    </ul>
+  </li>
+  <li>A line with the time in seconds that the zone is on</li>
+</ul>
+
+<!--
+================================================================================
+-->
+<h1>Sprinkler Controller Command Set</h1>
+The sprinkler controller uses one of the SparkFun LoRaSerial modules operating in virtual
+circuit mode.  The following commands may be passed to the sprinkler controller using either
+the virtual circuit serial protocol via the USB-C port or by using the remote commands from
+another radio in the network.
+
+<h2>Select a Zone</h2>
+<p>
+Zone numbers are 1 through 4.  The following command selects zone 1:</br>
+<code><pre>AT-CommandZone=1</pre></code>
+</p>
+
+<h2>Configure the Zone Solenoid</h2>
+<p>
+Alternating current (AC) solenoids require constant power while they are on (watering).  In the United States, they are typically found in two flavors: 115 Volts AC or 24 Volts AC.  The controller must provide the power for these solenoids and the controller always knows the state (on or off) of the solenoid.  During power failures these solenoids shut off.
+The following command selects an AC solenoid for the current commandZone:</br>
+<code><pre>AT-LatchingSolenoid=0</pre></code>
+</p>
+<p>
+Direct current (DC) latching solenoids are typically used with battery powered controllers.  They
+typically operate from 9 Volts to 30 Volts and operate similar to a click top pen.  A short power
+pulse turns on the water and a second power pulse turns off the water.
+The following command selects a DC latching solenoid for the current commandZone:</br>
+<code><pre>AT-LatchingSolenoid=1</pre></code>
+</p>
+
+<p>
+When power is lost, the DC latching solenoid is left in the last operating state, which may have
+been on (watering).  Upon reset, the sprinkler controller is not able to tell what the current
+state (on or off) is for any of the DC latching solenoids and assumes that all zones are off.
+Without knowing the state the controller is not able to automatically turn off the zone, stop
+the watering.
+The following command sends a power pulse to the current commandZone which can be used to turn
+off the DC latching solenoid:<br>
+<code><pre>ATI86</pre></code>
+</p>
+
+<h2>Clearing the Watering Schedule</h2>
+<p>
+The following command clears the entire watering schedule for the controller:</br>
+<code><pre>ATH</pre></code>
+</p>
+
+<h2>Setting the Schedule Day</h2>
+<p>
+The day numbers are:
+<ol start=0>
+  <li>Sunday</li>
+  <li>Monday</li>
+  <li>Tueday</li>
+  <li>Wednesday</li>
+  <li>Thursday</li>
+  <li>Friday</li>
+  <li>Saturday</li>
+</ol>
+</p>
+<p>
+The following command sets the day of week for the zone schedule to Friday:</br>
+<code><pre>AT-CommandDay=5</pre></code>
+</p>
+
+<h2>Setting the Start Time</h2>
+<p>
+The following command sets the start time the schedule to 10:30:10 PM (22:30:10,
+[((((22 * 60) + 30) * 60) + 10) * 1000]):
+<code><pre>AT-StartTime=81010000</pre></code>
+</p>
+
+<h2>Selecting a Zone</h2>
+<p>
+The controller supports four zones numbered 1 to 4.
+The following command selects a zone 2 for further commands:</br>
+<code><pre>AT-CommandZone=2</pre></code>
+</p>
+
+<h2>Setting the Zone Duration (Watering Time)</h2>
+<p>
+The following command sets the watering time for the zone to 15 minutes
+(15 * 60 * 1000 milliseconds):
+<code><pre>AT-ZoneDuration=900000</pre></code>
+</p>
+
+<h2>Enabling or Disabling the Controller</h2>
+<p>
+When the controller is enabled (1) it executes the watering schedule.  Disabling (0) the
+controller prevents the watering schedule from being executed.  The following command enables
+the controller:
+<code><pre>AT-EnableController=1</pre></code>
+</p>
+
+<h2>Displaying the Watering Schedule</h2>
+<p>
+The following command displays the watering schedule:
+<code><pre>ATI88</pre></code>
+</p>
+
+<h2>Setting Day of Week</h2>
+<p>
+The following command sets the day of week to Monday (Sunday=0, Monday=1, ..., Saturday=6):</br>
+<code><pre>AT-DayOfWeek=1</pre></code>
+</p>
+
+<h2>Setting Time of Day</h2>
+<p>
+The following command sets the time of day to 10:30 PM (22:30,
+[((22 * 60) + 30) * 60 * 1000]):
+<code><pre>AT-TimeOfDay=81000000</pre></code>
+</p>
+
+<h2>Displaying the Day of Week and Time</h2>
+<p>
+The following command displays the day of week and the time:
+<code><pre>ATI89</pre></code>
+</p>
+
+<h2>Display the Sprinkler Controller Status</h2>
+<p>
+The following command displays the sprinkler controller status:
+<code><pre>ATI87</pre></code>
+</p>
+
+<!--
+================================================================================
+-->
+<h1>Sprinkler Controller Firmware</h1>
+<p>
+The sprinkler controller firmware is an <a target="_blank" href="https://github.com/LeeLeahy2/SparkFun_LoRaSerial">open source project</a> with branch names starting with "sc-".
+This firmware is programmed into the LoRaSerial radio using a USB cable connected to a PC.
+The sprinkler controller uses the virtual circuit mode of the LoRaSerial radios to
+communicate with the sprinkler server identified by "ss-" branches.  The sprinkler
+server uses the radio link to pass the solenoid configuration, schedule, time and
+date to the sprinkler controller.
+</p>
+
+<h2>Firmware Settings</h2>
+<p>
+The following firmware settings are the default for sprinkler controller operation:
+<ul>
+  <li>operatingMode: MODE_VIRTUAL_CIRCUIT</li>
+  <li>selectLedUse: LEDS_VC, Blue: Received HEARTBEAT frame, Yellow: Frequency switch,
+    Green (left: RX data, NOT USED, RSSI level, TX data :right)
+  </li>
+  <li>dataScrambling: true</li>
+  <li>enableCrc16: true</li>
+  <li>triggerWidth: 10 microseconds</li>
+</ul>
+</p>
+
+<!--
+================================================================================
+-->
+<h1>Sprinkler Controller Hardware</h1>
+<ul>
+  <li><a target="_blank" href="20230202_202513.jpg"><img width=600 src="20230202_202513.jpg"></a></li>
+</ul>
+<p>
+The sprinkler controller consists of the following parts:
+</p>
+<ol>
+  <li><a target="_blank" href="https://www.sparkfun.com/products/19311">Sprinkler Controller - CPU and radio, communicates with the Sprinkler server</a></li>
+  <li><a target="_blank" href="https://smile.amazon.com/gp/product/B081BH627Q/ref=ppx_yo_dt_b_asin_title_o04_s00?ie=UTF8&psc=1">Antenna cable</a></li>
+  <li><a target="_blank" href="https://www.sparkfun.com/products/16566">Quad relay - Switches that control the sprinkler solenoids</a></li>
+  <li><a target="_blank" href="https://www.sparkfun.com/products/14426">I2C cable - Connects LoRaSerial to quad relay board and connects quad relay board to the display</a></li>
+  <li><a target="_blank" href="https://www.sparkfun.com/products/14532">Optional display - 64 x 48 pixels</a></li>
+  <li><a target="_blank" href="https://smile.amazon.com/gp/product/B09GM3V4NH/ref=ppx_yo_dt_b_asin_title_o08_s00?ie=UTF8&psc=1">USB cable - Powers LoRaSerial</a></li>
+  <li><a target="_blank" href="https://smile.amazon.com/gp/product/B081BH627Q/ref=ppx_yo_dt_b_asin_title_o04_s00?ie=UTF8&psc=1">9 Volt to 5 Volt regluator - Powers LoRaSerial</a></li>
+  <li><a target="_blank" href="https://smile.amazon.com/gp/product/B01D8FLQHE/ref=ppx_yo_dt_b_asin_title_o00_s00?ie=UTF8&psc=1">12 Volt 3 Amp power supply - Powers LoRaSerial, Quad Relay board and latching sprinkler solenoids, plugs into outlet and the quad relay board</a></li>
+  <li><a target="_blank" href="https://smile.amazon.com/gp/product/B097XTBSH8/ref=ppx_yo_dt_b_asin_title_o00_s00?ie=UTF8&psc=1">24 Volt AC transformer - The transformer powers 24 Volt AC sprinkler solenoids.  The transformer is mounted within the box (under gray panel containing the other electronics).  The red wires connect to 120 Volts AC in the output compartment and the blue wires power the solenoids through the relays</a></li>
+  <li><a target="_blank" href="https://smile.amazon.com/gp/product/B000VYGMF2/ref=ppx_yo_dt_b_asin_title_o03_s00?ie=UTF8&psc=1">Box with outlet</a></li>
+</ol>
+
+<!--
+================================================================================
+-->
+<h1>Sprinkler Controller Relay/Solenoid Configuration</h1>
+<p>
+The sprinkler controller demonstration unit uses the following relay configuration:
+</p>
+<ol>
+  <li>The 24 Volt AC solenoid connects to the COM and NC terminals.
+      Power (24 Volts AC) is connected to the NO and NC terminals and powers
+      the solenoid when the relay is on which connects NO to COM.
+<code><pre>
+                NO                 COM      black wire    black wire
+24 Volts AC -----------> Relay -----------> Orbit 24 Volt AC Solenoid ---------.
+                                                                               |
+            <------------------------------------------------------------------'
+                NC
+</pre></code>
+  </li>
+  <li>Not connected</li>
+  <li>Not connected</li>
+  <li>The DC latching solenoid connects to the COM and NC terminals.
+      Power (12 Volts DC) is connected to the NO(+) and NC (-) terminals and
+      powers the solenoid when the relay is on which connects NO to COM.</li>
+<code><pre>
+              NO (+)               COM      black wire        red wire
+12 Volts DC -----------> Relay -----------> Orbit DC Latching Solenoid --------.
+                                                                               |
+            <------------------------------------------------------------------'
+              NC (-)
+</pre></code>
+</ol>
+
+<p>
+NOTE: The <a target="_blank" href="https://www.lowes.com/pd/Orbit-Black-Replacement-Solenoid/3461102">Orbit DC Latching Solenoid</a>
+uses two different polarity pulses to turn on and off the water flow.
+<code><pre>
+   +9 Volts DC      .------.  ON
+                    |      |
+                    |      |
+    0 Volts --------'      '--------------------------------.      .--------
+                                                            |      |
+                                                            |      |
+   -9 Volts DC                                         OFF  '------'
+</pre></code>
+</p>
+<p>
+Two easy ways of switching the voltage across the coil are:
+<ol>
+  <li>
+    Add a double pole double throw relay to switch the DC voltage going to the coil
+    either before or after the single pole double throw relay.
+<code><pre>
+   +9 Volts DC -------o\    o------- Gnd
+                    .---\                        Relay to apply pulse
+                    |    o--------------------o    /o
+                    |                             /
+                    | DPDT                       o------------.
+                    | Voltage                                 |
+                    | Selection                               |
+                    | Relay                         DC Latching Solenoid
+                    |                                         |
+                    |                                         |
+                    |    o------------------------------------'
+                    '---/
+           Gnd -------o/    o------- +9 Volts DC
+</pre></code>
+    The voltage polarity gets selected using the DPDT relay and then the
+    pulse is generated using the SPDT relay.  This solution requires two
+    GPIOs to control the relays.
+  </li>
+  <li>
+    Alternatively an H-Bridge can be used instead of the two relays.  One such
+    H-Bridge is the
+    <a target="_blank" href="https://cdn-shop.adafruit.com/product-files/4489/4489_datasheet-l9110.pdf">L9110H</a>.
+    Two GPIO are needed to control the IA and IB inputs, and 12V is applied to
+    pins 2 and 3.
+    <table border=1>
+      <tr bgcolor="#c0ffff">
+        <th>State</th>
+        <th>IA, Pin 6</th>
+        <th>IB, Pin 7</th>
+        <th>Red Wire, Pin 1</th>
+        <th>Black Wire, Pin 4</th>
+      </tr>
+      <tr>
+        <td align="center">OFF</td>
+        <td align="center">0</td>
+        <td align="center">0</td>
+        <td align="center">Gnd</td>
+        <td align="center">Gnd</td>
+      </tr>
+      <tr>
+        <td align="center">ON Pulse</td>
+        <td align="center">1</td>
+        <td align="center">0</td>
+        <td align="center">12 Volts</td>
+        <td align="center">Gnd</td>
+      </tr>
+      <tr>
+        <td align="center">OFF Pulse</td>
+        <td align="center">0</td>
+        <td align="center">1</td>
+        <td align="center">Gnd</td>
+        <td align="center">12 Volts</td>
+      </tr>
+    </table>
+  </li>
+</ol>
+</p>
+
+<!--
+================================================================================
+-->
+<h1>Irrigation Table</h1>
+<table border=1>
+  <tr bgcolor="#c0ffff">
+    <th>Nozzle Type</th>
+    <th>PSI</th>
+    <th>Gallons per Minute</th>
+    <th>Area (Square Inches)</th>
+    <th>Inches per Hour<br>Single Nozzle</th>
+    <th>Inches per Hour<br>Square Pattern</th>
+    <th>Inches per Hour<br>Triangle Pattern</th>
+  </tr>
+  <tr>
+    <td>Rain Bird 15' 360&deg;</td>
+    <td align="center">30</td>
+    <td align="center">3.70</td>
+    <td align="center">101788</td>
+    <td align="center">0.504</td>
+    <td align="center">1.58</td>
+    <td align="center">1.83</td>
+  </tr>
+  <tr>
+    <td>Rain Bird 15' 270&deg;</td>
+    <td align="center">30</td>
+    <td align="center">2.78</td>
+    <td align="center">76341</td>
+    <td align="center">0.283</td>
+    <td align="center">1.58</td>
+    <td align="center">1.83</td>
+  </tr>
+  <tr>
+    <td>Rain Bird 15' 180&deg;</td>
+    <td align="center">30</td>
+    <td align="center">1.85</td>
+    <td align="center">50894</td>
+    <td align="center">0.126</td>
+    <td align="center">1.58</td>
+    <td align="center">1.83</td>
+  </tr>
+  <tr>
+    <td>Rain Bird 15' 90&deg;</td>
+    <td align="center">30</td>
+    <td align="center">0.93</td>
+    <td align="center">25447</td>
+    <td align="center">0.032</td>
+    <td align="center">1.58</td>
+    <td align="center">1.83</td>
+  </tr>
+  <tr>
+    <td>Rain Bird 4' x 30'</td>
+    <td align="center">30</td>
+    <td align="center">1.21</td>
+    <td align="center">17280</td>
+    <td align="center">0.97</td>
+    <td align="center">1.83</td>
+    <td align="center">&nbsp;</td>
+  </tr>
+  <tr>
+    <td>Rain Bird 4' x 15' Center</td>
+    <td align="center">30</td>
+    <td align="center">0.61</td>
+    <td align="center">8640</td>
+    <td align="center">0.98</td>
+    <td align="center">1.95</td>
+    <td align="center">&nbsp;</td>
+  </tr>
+  <tr>
+    <td>Rain Bird 4' x 15' Side</td>
+    <td align="center">30</td>
+    <td align="center">0.49</td>
+    <td align="center">8640</td>
+    <td align="center">0.78</td>
+    <td align="center">1.56 - 1.75</td>
+    <td align="center">&nbsp;</td>
+  </tr>
+</table>
+
+<!--
+================================================================================
+-->
+<h1>Related Links</h1>
+<p>
+The following links for solenoids and sprinkler heads are useful to understand
+the behavior of the overall sprinkler system.
+</p>
+<ul>
+  <li><a target="_blank" href="https://docs.google.com/document/d/15bLlQoCdpQ8viCHi92_DoUSNLybYSoJhEzPxNQ1EjoA/edit#heading=h.iddxc07rrme1">Design: Sprinkler Controller</a></li>
+  <li><a target="_blank" href="https://www.hunterindustries.com/sites/default/files/CA-Cutsheet-DC-Solenoids-Additional-Data-EM.pdf">Hunter 458200: DC-Latching Solenoid</a> specifies a pulse width of 250 mSec</li>
+  <li><a target="_blank" href="https://www.hunterindustries.com/product-line/nozzles">Hunter Nozzles</a>
+    <ul>
+      <li><a target="_blank" href="https://www.hunterindustries.com/sites/default/files/CA-Cutsheet-Pro-Spray-Fixed-Arc-Nozzles-US.pdf">Fixed ARC Nozzles</a></li>
+    </ul>
+  </li>
+  <li><a target="_blank" href="https://www.rainbird.com/sites/default/files/media/documents/2018-11/TurfCatalog2019-SprayNozzles.pdf">Rain Bird Nozzles</a>
+  </li>
+  <li><a target="_blank" href="https://sciencing.com/calculate-gallons-per-cubic-foot-5985285.html">Water volume</a>: 1 U.S. liquid gallon = 231 cubic inches</li>
+</ul>
+
+  </body>
+</html>
