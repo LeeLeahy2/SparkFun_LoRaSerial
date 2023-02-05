@@ -547,6 +547,7 @@ uint32_t timeOfDay;               //Number of milliseconds from midnight
 uint8_t dayOfWeek;                //Day of week 0 - 6
 bool scheduleCopied;              //True after daily schedule copied from week to today;
 bool scheduleActive;              //True while an entry is active in the schedule
+bool scheduleReady;               //Set true after the schedule is copied into today
 
 CONTROLLER_SCHEDULE week[7];
 CONTROLLER_SCHEDULE today;        //Active schedule
@@ -557,6 +558,7 @@ uint32_t zoneOnDuration;          //Amount of time that the zone should be on
 #define MILLISECONDS_IN_A_MINUTE  (60 * MILLISECONDS_IN_A_SECOND)
 #define MILLISECONDS_IN_AN_HOUR   (60 * MILLISECONDS_IN_A_MINUTE)
 #define MILLISECONDS_IN_A_DAY     (24 * MILLISECONDS_IN_AN_HOUR)
+#define MILLISECONDS_IN_A_WEEK    (7 * MILLISECONDS_IN_A_DAY)
 
 //Sprinkler commands
 uint8_t commandZone;              //Zone number for commands, 0 - ZONE_NUMBER_MAX
@@ -726,6 +728,8 @@ void loop()
   updateRadioState(); //Send packets as needed for handshake, data, remote commands
 
   updateLeds(); //Update the LEDs on the board
+
+  updateZones(); //Turn on or off the sprinkler zones
 
   updateHopISR(); //Clear hop ISR as needed
 }
