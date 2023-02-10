@@ -105,6 +105,9 @@ void updateZones()
   if (!online.quadRelay)
     quadRelayOffline();
 
+  //Clear the flow interrupt after a while
+  flowClearInterrupt();
+
   //Verify that the previous schedule has completed.  If completed, check for
   //a watering schedule for today
   waterToday = false;
@@ -461,6 +464,58 @@ void turnOffRelay()
   pulseDuration = 0;
   pulseStartTime = 0;
 }
+
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+static bool flowDetected;
+static uint32_t flowSensorLastInterruptTime;
+
+#define FLOW_TIMEOUT                7 //Milliseconds
+
+//Initializee the interrupt for the flow meter
+void flowSensorBegin()
+{
+  //Flow sensor - Detect wind switch closure
+  //
+  //  5V  ____________________                    ______________________
+  //  0V                      |||______________|||
+  //                         Noise            Noise
+  //
+  pinMode(pin_FlowSensor, INPUT);
+  attachInterrupt(digitalPinToInterrupt(pin_FlowSensor), flowSensorIsr, FALLING);
+}
+
+//Handle the flow meter interrupt
+void flowSensorIsr()
+{
+  //Remember the last time the interrupt fired
+  if (!flowDetected)
+  {
+    flowSensorLastInterruptTime = millis();
+    flowDetected = true;
+    online.flowMeter = true;
+  }
+
+  //Pulse the LED when flow is detected
+  blinkFlowLed(true);
+}
+
+//Clear the flow meter interrupt
+void flowClearInterrupt()
+{
+  uint8_t inputValue;
+
+  //Clear the flow interrupt after a while
+  inputValue = digitalRead(pin_FlowSensor);
+  if (flowDetected && inputValue && ((millis() - flowSensorLastInterruptTime) >= FLOW_TIMEOUT))
+  {
+    //Account for this gallon of flow
+    flowCountTotal++;
+    flowDetected = false;
+  }
+}
+
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 //Initialize the H-bridge
 void hBridgeBegin()

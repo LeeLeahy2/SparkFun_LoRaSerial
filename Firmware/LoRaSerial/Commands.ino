@@ -269,6 +269,7 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI13 - Display the SX1276 registers");
         systemPrintln("  ATI14 - Dump the radioTxBuffer");
         systemPrintln("  ATI15 - Dump the NVM unique ID table");
+        systemPrintln("  ATI82 - Read flow count");
         systemPrintln("  ATI83 - Turn off the H-bridge");
         systemPrintln("  ATI84 - Set H-bridge negative voltage");
         systemPrintln("  ATI85 - Set H-bridge positive voltage");
@@ -794,6 +795,11 @@ bool commandAT(const char * commandString)
       default:
         return false;
 
+      case ('2'): //ATI82 - Read flow count
+        systemPrint("Gallons: ");
+        systemPrintln(flowCountTotal);
+        return true;
+
       case ('3'): //ATI83 - Turn off the H-bridge
         hBridgeSetDrive(false, true);
         return true;
@@ -829,6 +835,8 @@ bool commandAT(const char * commandString)
         systemPrintln(online.hBridge ? "Supported" : "NOT supported");
         systemPrint("    EEPROM: ");
         systemPrintln(online.eeprom ? "Available" : "Failed to initialize");
+        systemPrint("    Flow Meter");
+        systemPrintln(online.flowMeter ? "Available" : "No flow detected");
         systemPrint("    H-Bridge: ");
         if (online.hBridge)
         {

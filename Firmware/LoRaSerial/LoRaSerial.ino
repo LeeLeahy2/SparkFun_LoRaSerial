@@ -575,6 +575,9 @@ uint8_t commandDay;               //Day of week number or commands, 0 - 6
 
 //H-Bridge
 int8_t hBridgeLastVoltage;        //-1 = Negative, 0 = Off, 1 = Positive
+
+//Flow sensor
+uint32_t flowCountTotal;          //Number of times the flow sensor closed
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 //Global variables

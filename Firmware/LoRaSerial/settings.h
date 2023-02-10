@@ -371,6 +371,7 @@ typedef enum
   LEDS_ALL_ON,      //15: All LEDs on
 
   //Add user LED types from 255 working down
+  LEDS_SPRINKLER_CONTROLLER = 255,
 } LEDS_USE_TYPE;
 
 typedef struct _CLOCK_SYNC_DATA
@@ -421,7 +422,7 @@ typedef struct struct_settings {
 
   uint8_t operatingMode = MODE_VIRTUAL_CIRCUIT; //Receiving unit will check netID and ACK. If set to false, receiving unit doesn't check netID or ACK.
 
-  uint8_t selectLedUse = LEDS_VC; //Select LED use
+  uint8_t selectLedUse = LEDS_SPRINKLER_CONTROLLER; //Select LED use
   bool server = false; //Default to being a client, enable server for multipoint, VC and training
   uint8_t netID = 192; //Both radios must share a network ID
   bool verifyRxNetID = true; //Verify RX netID value when not operating in point-to-point mode
@@ -532,6 +533,7 @@ struct struct_online {
   bool eeprom = false;
   bool quadRelay = false;
   bool hBridge = false;
+  bool flowMeter = false;
 } online;
 
 //Increasing above 4 requires adding support for second quad relay board

@@ -8,6 +8,8 @@ WDTZero myWatchDog;
 #define NVM_ERASE_VALUE         0xff
 #define NVM_UNIQUE_ID_OFFSET    (EEPROM_EMULATION_SIZE - (MAX_VC * UNIQUE_ID_BYTES))
 
+void flowSensorIsr();
+
 /*
   Data flow
                    +--------------+
@@ -48,7 +50,7 @@ WDTZero myWatchDog;
                           |      PA19 12 |<--- MISO ---> SPI_POCI
                           |              |
                           | 38 PA13      |
-                          | 0  PA10      |
+    Flow Sensor --------->| 0  PA10      |
                           | 1  PA11      |
                           | 30 PB22      |
                           |              |
@@ -64,6 +66,8 @@ WDTZero myWatchDog;
                           |      PA22 20 |---> SDA
                           +--------------+
 */
+
+const int pin_FlowSensor = 0;
 
 //Initialize the LoRaSerial board
 void samdBeginBoard()
