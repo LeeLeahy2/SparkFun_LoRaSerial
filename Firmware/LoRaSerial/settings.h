@@ -522,6 +522,7 @@ typedef struct struct_settings {
 
   bool debugSprinklers = false; //Enable debugging of sprinkler controller
   uint16_t pulseDuration = 250; //Milliseconds for latching solenoid pulse duration
+  bool debugHBridge = false; //Enable debugging of the H-Bridge
 } Settings;
 Settings settings;
 
@@ -530,6 +531,7 @@ struct struct_online {
   bool radio = false;
   bool eeprom = false;
   bool quadRelay = false;
+  bool hBridge = false;
 } online;
 
 //Increasing above 4 requires adding support for second quad relay board

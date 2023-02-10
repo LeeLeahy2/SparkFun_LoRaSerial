@@ -518,6 +518,15 @@ unsigned long retransmitTimeout = 0; //Throttle back re-transmits
 
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
+//Serial Controlled Motor Driver
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+#include "SCMD.h"
+
+SCMD hBridge;
+
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
 //Sprinkler controller variables
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
@@ -563,6 +572,9 @@ uint32_t zoneOnDuration;          //Amount of time that the zone should be on
 //Sprinkler commands
 uint8_t commandZone;              //Zone number for commands, 0 - ZONE_NUMBER_MAX
 uint8_t commandDay;               //Day of week number or commands, 0 - 6
+
+//H-Bridge
+int8_t hBridgeLastVoltage;        //-1 = Negative, 0 = Off, 1 = Positive
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 //Global variables
@@ -694,6 +706,8 @@ void setup()
   //Verify connection to quad relay board
   if(quadRelay.begin())
     online.quadRelay = true;
+
+  hBridgeBegin(); //Start the H-bridge
 
   beginLoRa(); //Start radio
 

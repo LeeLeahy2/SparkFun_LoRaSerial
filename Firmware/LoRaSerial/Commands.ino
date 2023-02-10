@@ -21,6 +21,7 @@ enum {
   //Sprinkler Controller types
   TYPE_DAY,
   TYPE_DURATION,
+  TYPE_LATCHING_MASK,
   TYPE_START,
   TYPE_TIME,
   TYPE_ZONE,
@@ -268,6 +269,9 @@ bool commandAT(const char * commandString)
         systemPrintln("  ATI13 - Display the SX1276 registers");
         systemPrintln("  ATI14 - Dump the radioTxBuffer");
         systemPrintln("  ATI15 - Dump the NVM unique ID table");
+        systemPrintln("  ATI83 - Turn off the H-bridge");
+        systemPrintln("  ATI84 - Set H-bridge negative voltage");
+        systemPrintln("  ATI85 - Set H-bridge positive voltage");
         systemPrintln("  ATI86 - Pulse zone power");
         systemPrintln("  ATI87 - Display sprinkler controller status");
         systemPrintln("  ATI88 - Display the sprinkler schedule");
@@ -790,6 +794,18 @@ bool commandAT(const char * commandString)
       default:
         return false;
 
+      case ('3'): //ATI83 - Turn off the H-bridge
+        hBridgeSetDrive(false, true);
+        return true;
+
+      case ('4'): //ATI84 - Set H-bridge negative voltage
+        hBridgeSetDrive(true, false);
+        return true;
+
+      case ('5'): //ATI85 - Set H-bridge positive voltage
+        hBridgeSetDrive(true, true);
+        return true;
+
       case ('6'): //ATI86 - Pulse zone power
         //Turn on the relay
         if (online.quadRelay)
@@ -809,6 +825,26 @@ bool commandAT(const char * commandString)
 
       case ('7'): //ATI87 - Display sprinkler controller status
         systemPrintln("Sprinkler Controller Status");
+        systemPrint("    DC Latching Solenoids: ");
+        systemPrintln(online.hBridge ? "Supported" : "NOT supported");
+        systemPrint("    EEPROM: ");
+        systemPrintln(online.eeprom ? "Available" : "Failed to initialize");
+        systemPrint("    H-Bridge: ");
+        if (online.hBridge)
+        {
+          if (hBridgeLastVoltage)
+          {
+            systemPrint((hBridgeLastVoltage >= 0) ? "Positive" : "Negative");
+            systemPrintln(" voltage");
+          }
+          else
+            systemPrintln("Off");
+        }
+        else
+          systemPrintln("Failed initialization");
+        systemPrintln(online.hBridge ? "Installed" : "Failed initialization");
+        systemPrint("    Quad Relay: ");
+        systemPrintln(online.quadRelay ? "Availalbe" : "Failed to initialize");
         systemPrint("    Radio: ");
         if (!online.radio)
           systemPrintln("Offline");
@@ -1402,12 +1438,13 @@ const COMMAND_ENTRY commands[] =
   {'Y',   0,   0,    0,   6,    0, TYPE_DAY,          valInt,         "DayOfWeek",            &dayOfWeek},
   {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "DebugSprinklers",      &tempSettings.debugSprinklers},
   {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "EnableController",     &enableSprinklerController},
-  {'Y',   0,   0,    0,   1,    0, TYPE_ZONE_MASK,    valInt,         "LatchingSolenoid",     &latchingSolenoid},
+  {'Y',   0,   0,    0,   1,    0, TYPE_LATCHING_MASK,valInt,         "LatchingSolenoid",     &latchingSolenoid},
   {'Y',   0,   0,  100,  1000,  0, TYPE_U16,          valInt,         "PulseDuration",        &tempSettings.pulseDuration},
   {'Y',   0,   0,    0, 86399999, 0, TYPE_START,      valInt,         "StartTime",            &week},
   {'Y',   0,   0,    0, 86399999, 0, TYPE_TIME,       valInt,         "TimeOfDay",            &timeOfDay},
   {'Y',   0,   0,    0,  7200000, 0, TYPE_DURATION,   valInt,         "ZoneDuration",         &week},
   {'Y',   0,   0,    0,   1,    0, TYPE_ZONE_MASK,    valInt,         "ZoneManualOn",         &zoneManualOn},
+  {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "DebugHBridge",         &tempSettings.debugHBridge},
 };
 
 const int commandCount = sizeof(commands) / sizeof(commands[0]);
@@ -1556,6 +1593,7 @@ void commandDisplay(const COMMAND_ENTRY * command)
       systemPrint(dayName[*(uint8_t *)(command->setting)]);
       systemPrint(")");
       break;
+    case TYPE_LATCHING_MASK:
     case TYPE_ZONE_MASK:
       systemPrintln(((*(ZONE_MASK *)(command->setting)) >> commandZone) & 1);
       break;
@@ -1722,6 +1760,14 @@ bool commandSetOrDisplayValue(const COMMAND_ENTRY * command, const char * buffer
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)
           *(uint16_t *)(command->setting) = (uint16_t)settingValue;
+        break;
+      case TYPE_LATCHING_MASK:
+        valid = online.hBridge && command->validate((void *)&settingValue, command->minValue, command->maxValue);
+        if (valid)
+        {
+          *(ZONE_MASK *)(command->setting) &= ~(1 << (commandZone- 1));
+          *(ZONE_MASK *)(command->setting) |= settingValue << (commandZone - 1);
+        }
         break;
       case TYPE_ZONE_MASK:
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);

@@ -5,6 +5,9 @@
   Sprinkler controller support routines.
 */
 
+#define DC_VOLTAGE_OUTPUT_PORT        0
+#define MAX_H_BRIDGE_RETRY_COUNT      25
+
 void adjustTimeOfDay()
 {
   //Ensure that the previousTimestampOffset is non-zero
@@ -401,7 +404,11 @@ void turnOffZone()
 
   //Turn off the zone
   if (latchingSolenoid & zoneActive)
+  {
+    //Output the negative pulse
+    hBridgeOutputVoltage(false);
     turnOnRelay(zoneActive);
+  }
   else
     turnOffRelay();
 }
@@ -416,6 +423,10 @@ void turnOffRelay()
   //Turn off the relay
   if (online.quadRelay)
     quadRelay.turnRelayOff(zoneNumber);
+
+  //Turn off the H-bridge
+  if (latchingSolenoid & zoneActive)
+    hBridgeSetDrive(false, true);
 
   //Update the display
   relayOn &= ~zoneActive;
@@ -449,4 +460,136 @@ void turnOffRelay()
   }
   pulseDuration = 0;
   pulseStartTime = 0;
+}
+
+//Initialize the H-bridge
+void hBridgeBegin()
+{
+  uint8_t retryCount;
+
+  //Configure the driver for I2C operation with the default I2C address
+  hBridge.settings.commInterface = I2C_MODE;
+  hBridge.settings.I2CAddress = 0x5D;
+
+  //Initialize the H-bridge driver
+  if (settings.debugHBridge)
+    systemPrintln("Initializing the H-bridge");
+
+  retryCount = 0;
+  while ((retryCount++ <= MAX_H_BRIDGE_RETRY_COUNT) && (hBridge.begin() != 0xA9))
+  {
+    petWDT();
+    delay(100);
+  }
+
+  //Check for initialization failure
+  if (retryCount > MAX_H_BRIDGE_RETRY_COUNT)
+  {
+    online.hBridge = false;
+    if (settings.debugHBridge)
+      systemPrintln("H-Briget offline - DC latching solenoids are not supported");
+
+    //DC latching solenoids are not supported by this sprinkler controller
+    latchingSolenoid = 0;
+    return;
+  }
+
+  if (settings.debugHBridge)
+    systemPrintln("Waiting for H-bridge driver to finish initialization");
+  while (!hBridge.ready())
+    petWDT();
+
+  //By default don't invert the output
+  hBridgeWaitNotBusy();
+  hBridge.inversionMode(DC_VOLTAGE_OUTPUT_PORT, 0);
+
+  //Enable the H-bridge
+  hBridgeEnable(true);
+
+  //By default apply negative voltage for off pulse
+  hBridgeOutputVoltage(false);
+
+  //The H-bridge is available to switch the polarity for DC latching solenoids
+  online.hBridge = true;
+  if (settings.debugHBridge)
+    systemPrintln("H-bridge is online");
+}
+
+//Wait for the SCMD to be ready to accept another command
+void hBridgeWaitNotBusy()
+{
+  if (online.hBridge)
+  {
+    if (settings.debugHBridge)
+      systemPrintln("Waiting for SCMD to accept command");
+    while (hBridge.busy())
+      petWDT();
+  }
+}
+
+//Enable/disable H-bridge output
+void hBridgeEnable(bool enable)
+{
+  if (online.hBridge)
+  {
+    //Wait for the H-bridge to accept a command
+    hBridgeWaitNotBusy();
+
+    //Enable or disable the voltage output
+    if (settings.debugHBridge)
+    {
+      systemPrint("H-bridge ");
+      systemPrint(enable ? "en" : "dis");
+      systemPrintln("abling voltage output");
+    }
+    if (enable)
+      hBridge.enable();
+    else
+      hBridge.disable();
+  }
+}
+
+//Set the H-bridge drive level
+void hBridgeSetDrive(bool on, bool positiveVoltage)
+{
+  if (online.hBridge)
+  {
+    hBridgeEnable(true);
+
+    //Wait for the H-bridge to accept a command
+    hBridgeWaitNotBusy();
+
+    //Select the output voltage
+    if (settings.debugHBridge)
+    {
+      if (on)
+      {
+        systemPrint("H-bridge selecting ");
+        systemPrint(positiveVoltage ? "positive" : "negative");
+        systemPrintln(" voltage");
+      }
+      else
+        systemPrintln("H-bridge turning voltage off");
+    }
+    hBridge.setDrive(DC_VOLTAGE_OUTPUT_PORT, positiveVoltage ? 0 : 1, on ? 255 : 0);
+
+    //Remember the last voltage setting
+    if (on)
+      hBridgeLastVoltage = positiveVoltage ? 1 : -1;
+    else
+      hBridgeLastVoltage = 0;
+  }
+}
+
+//Enable H-bridge output
+void hBridgeOutputVoltage(bool positiveVoltage)
+{
+  if (online.hBridge)
+  {
+    //Turn off the voltage
+    hBridgeSetDrive(false, true);
+
+    //Turn on the new voltage
+    hBridgeSetDrive(true, positiveVoltage);
+  }
 }
