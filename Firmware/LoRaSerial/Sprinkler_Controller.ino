@@ -529,6 +529,7 @@ void flowSensorIsr()
 void flowSwitchDebounce()
 {
   uint8_t inputValue;
+  uint8_t zoneNumber;
 
   inputValue = digitalRead(pin_FlowSensor);
 
@@ -539,7 +540,15 @@ void flowSwitchDebounce()
     if ((!flowDetected) && inputValue)
     {
       //Account for this gallon of flow
-      gallonsTotal++;
+      gallons.total++;
+      if (zoneActive)
+      {
+        //Bill this gallon to the corresponding zone
+        zoneNumber = zoneMaskToZoneNumber(zoneActive);
+        gallons.zone[zoneNumber - 1]++;
+      }
+      else
+        gallons.leaked++;
       flowDetected = true;
       online.flowMeter = true;
 

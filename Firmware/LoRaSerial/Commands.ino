@@ -944,8 +944,38 @@ bool commandAT(const char * commandString)
         return false;
 
       case ('2'): //ATI82 - Read flow meter count
-        systemPrint("Gallons: ");
-        systemPrintln(gallonsTotal);
+        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        {
+          VC_RUNTIME_MESSAGE msg;
+          uint8_t * data;
+
+          //Build the runtime message
+          memcpy(&msg.runtime, &runtime.u64, sizeof(msg.runtime));
+          memcpy(&msg.programmed, &programmed, sizeof(msg.programmed));
+
+          //Send the message
+          systemWrite(START_OF_VC_SERIAL);    //Start byte
+          systemWrite(3 + sizeof(WATER_USE)); //Length
+          systemWrite(PC_WATER_USE);          //Destination
+          systemWrite(myVc);                  //Source
+          data = (uint8_t *)&gallons;
+          for (int index = 0; index < sizeof(WATER_USE); index++)
+            systemWrite(*data++);
+        }
+        else
+        {
+          systemPrint("Total Gallons: ");
+          systemPrintln(gallons.total);
+          systemPrint("Leaked Gallons: ");
+          systemPrintln(gallons.leaked);
+          for (int zone = 0; zone < ZONE_NUMBER_MAX; zone++)
+          {
+            systemPrint("Zone ");
+            systemPrint(zone + 1);
+            systemPrint(" Gallons: ");
+            systemPrintln(gallons.zone[zone]);
+          }
+        }
         return true;
 
       case ('3'): //ATI83 - Turn off the H-bridge

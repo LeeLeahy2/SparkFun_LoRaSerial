@@ -601,7 +601,8 @@ uint8_t commandDay;               //Day of week number or commands, 0 - 6
 int8_t hBridgeLastVoltage;        //-1 = Negative, 0 = Off, 1 = Positive
 
 //Flow sensor
-uint32_t gallonsTotal;            //Number of times the flow sensor closed
+WATER_USE gallons;                //Measured water use
+
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 //Global variables
