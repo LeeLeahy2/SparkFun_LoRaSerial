@@ -15,7 +15,8 @@
 // Types
 //------------------------------------------------------------------------------
 
-typedef uint8_t ZONE_MASK;      //0 = No zone (off), bit # + 1: 1 - 8 = Zone number
+typedef uint8_t ZONE_T;           //0 = No zone (off), bit # + 1: 1 - 8 = Zone number
+#define ZONE_MASK       ((1 << ZONE_NUMBER_MAX) - 1)
 
 typedef struct _CONTROLLER_SCHEDULE
 {

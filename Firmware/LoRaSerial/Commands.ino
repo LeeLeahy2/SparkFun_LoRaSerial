@@ -25,7 +25,7 @@ enum {
   TYPE_START,
   TYPE_TIME,
   TYPE_ZONE,
-  TYPE_ZONE_MASK,
+  TYPE_ZONE_T,
 };
 
 typedef bool (* COMMAND_ROUTINE)(const char * commandString);
@@ -1703,7 +1703,7 @@ const COMMAND_ENTRY commands[] =
   {'Y',   0,   0,    0, 86399999, 0, TYPE_START,      valInt,         "StartTime",            &week},
   {'Y',   0,   0,    0, 86399999, 0, TYPE_TIME,       valInt,         "TimeOfDay",            &timeOfDay},
   {'Y',   0,   0,    0,  7200000, 0, TYPE_DURATION,   valInt,         "ZoneDuration",         &week},
-  {'Y',   0,   0,    0,   1,    0, TYPE_ZONE_MASK,    valInt,         "ZoneManualOn",         &zoneManualOn},
+  {'Y',   0,   0,    0,   1,    0, TYPE_ZONE_T,       valInt,         "ZoneManualOn",         &zoneManualOn},
   {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "DebugHBridge",         &tempSettings.debugHBridge},
 };
 
@@ -1854,8 +1854,8 @@ void commandDisplay(const COMMAND_ENTRY * command)
       systemPrint(")");
       break;
     case TYPE_LATCHING_MASK:
-    case TYPE_ZONE_MASK:
-      systemPrintln(((*(ZONE_MASK *)(command->setting)) >> commandZone) & 1);
+    case TYPE_ZONE_T:
+      systemPrintln(((*(ZONE_T *)(command->setting)) >> commandZone) & 1);
       break;
   }
   systemPrintln();
@@ -2025,16 +2025,16 @@ bool commandSetOrDisplayValue(const COMMAND_ENTRY * command, const char * buffer
         valid = online.hBridge && command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)
         {
-          *(ZONE_MASK *)(command->setting) &= ~(1 << (commandZone- 1));
-          *(ZONE_MASK *)(command->setting) |= settingValue << (commandZone - 1);
+          *(ZONE_T *)(command->setting) &= ~(1 << (commandZone- 1));
+          *(ZONE_T *)(command->setting) |= settingValue << (commandZone - 1);
         }
         break;
-      case TYPE_ZONE_MASK:
+      case TYPE_ZONE_T:
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)
         {
-          *(ZONE_MASK *)(command->setting) &= ~(1 << (commandZone- 1));
-          *(ZONE_MASK *)(command->setting) |= settingValue << (commandZone - 1);
+          *(ZONE_T *)(command->setting) &= ~(1 << (commandZone- 1));
+          *(ZONE_T *)(command->setting) |= settingValue << (commandZone - 1);
         }
         break;
     }

@@ -559,15 +559,15 @@ const char * day3Letter[7] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 const char * dayName[7] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 //Display support
-ZONE_MASK zoneOn;
-ZONE_MASK relayOn;
+ZONE_T zoneOn;
+ZONE_T relayOn;
 
 //Sprinkler solenoid management
 uint8_t zoneNumber;               //0 = None, 1 - ZONE_NUMBER_MAX
-ZONE_MASK latchingSolenoid = 0xff;//Mask of latching solenoids
-ZONE_MASK zoneActive;             //The current zone that is on or off
-ZONE_MASK zoneManualOn;           //Mask of zones on/off, set only one bit!
-ZONE_MASK zoneManualPreviousOn;   //Previous mask of zones on and off
+ZONE_T latchingSolenoid = 0xff;   //Mask of latching solenoids
+ZONE_T zoneActive;                //The current zone that is on or off
+ZONE_T zoneManualOn;              //Mask of zones on/off, set only one bit!
+ZONE_T zoneManualPreviousOn;      //Previous mask of zones on and off
 uint32_t pulseDuration;           //Length of the pulse in milliseconds, off = 0
 uint32_t pulseStartTime;          //Time the pulse started
 uint32_t onTime;                  //Time the zone was turned on

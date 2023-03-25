@@ -293,7 +293,7 @@ void quadRelayOffline()
   //Reboot
 }
 
-uint8_t zoneMaskToZoneNumber(ZONE_MASK zoneMask)
+uint8_t zoneMaskToZoneNumber(ZONE_T zoneMask)
 {
   uint8_t zone;
 
@@ -308,9 +308,9 @@ uint8_t zoneMaskToZoneNumber(ZONE_MASK zoneMask)
   return 0;
 }
 
-void turnOnRelay(ZONE_MASK zoneMask)
+void turnOnRelay(ZONE_T zoneMask)
 {
-  ZONE_MASK previousZoneActive;
+  ZONE_T previousZoneActive;
 
   //Get the zone number: 1 - 8
   zoneNumber = zoneMaskToZoneNumber(zoneMask);
@@ -376,7 +376,7 @@ void turnOnRelay(ZONE_MASK zoneMask)
 //                                                    \___/           -9V
 
 //Turn on the zone
-void turnOnZone(ZONE_MASK zoneMask)
+void turnOnZone(ZONE_T zoneMask)
 {
   //Use a positive pulse for the DC latching solenoids
   if (latchingSolenoid & zoneMask)
@@ -412,8 +412,8 @@ void turnOffZone()
 void turnOffAllZones()
 {
   int zone;
-  ZONE_MASK latching;
-  ZONE_MASK on;
+  ZONE_T latching;
+  ZONE_T on;
 
   //Save the latching state
   latching = latchingSolenoid;
