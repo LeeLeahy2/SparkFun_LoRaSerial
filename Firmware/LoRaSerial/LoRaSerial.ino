@@ -573,6 +573,7 @@ uint32_t pulseStartTime;          //Time the pulse started
 uint32_t onTime;                  //Time the zone was turned on
 bool enableSprinklerController;   //Enable the sprinkler controller
 bool turnWaterOff;                //Set true when zone is being turned off
+uint32_t mSecPerInch[ZONE_NUMBER_MAX]; //Get the conversion factor to and from time
 
 //Sprinkler controller schedule for today
 uint8_t scheduleDay;              //Current schedule day

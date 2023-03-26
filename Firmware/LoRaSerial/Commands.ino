@@ -22,6 +22,7 @@ enum {
   TYPE_DAY,
   TYPE_DURATION,
   TYPE_LATCHING_MASK,
+  TYPE_MSEC_INCH,
   TYPE_START,
   TYPE_TIME,
   TYPE_ZONE,
@@ -1698,6 +1699,7 @@ const COMMAND_ENTRY commands[] =
   {'Y',   0,   0,   50,  1000,  0, TYPE_U16,          valInt,         "DisplayUpdate",        &tempSettings.displayUpdate},
   {'Y',   0,   0,    0,   1,    0, TYPE_BOOL,         valInt,         "EnableController",     &enableSprinklerController},
   {'Y',   0,   0,    0,   1,    0, TYPE_LATCHING_MASK,valInt,         "LatchingSolenoid",     &latchingSolenoid},
+  {'Y',   0,   0,    0, 0xffffffff, 0, TYPE_MSEC_INCH, valInt,        "mSecPerInch",     &mSecPerInch},
   {'Y',   0,   0,  100,  1000,  0, TYPE_U16,          valInt,         "PulseDuration",        &tempSettings.pulseDuration},
   {'Y',   0,   0,    0, 15000,  0, TYPE_U16,          valInt,         "SplashScreenDelay",    &tempSettings.splashScreenDelay},
   {'Y',   0,   0,    0, 86399999, 0, TYPE_START,      valInt,         "StartTime",            &week},
@@ -1772,6 +1774,9 @@ void commandDisplay(const COMMAND_ENTRY * command)
       break;
     case TYPE_KEY:
       displayEncryptionKey((uint8_t *)(command->setting));
+      break;
+    case TYPE_MSEC_INCH:
+      systemPrint(((uint32_t *)(command->setting))[commandZone]);
       break;
     case TYPE_U8:
       systemPrint(*(uint8_t *)(command->setting));
@@ -1979,6 +1984,11 @@ bool commandSetOrDisplayValue(const COMMAND_ENTRY * command, const char * buffer
         if (valid)
           for (uint32_t x = 0; x < (2 * AES_KEY_BYTES); x += 2)
             ((uint8_t *)command->setting)[x / 2] = charHexToDec(buffer[x], buffer[x + 1]);
+        break;
+      case TYPE_MSEC_INCH:
+        valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
+        if (valid)
+          ((uint32_t *)(command->setting))[commandZone] = settingValue;
         break;
       case TYPE_SPEED_AIR:
       case TYPE_SPEED_SERIAL:
