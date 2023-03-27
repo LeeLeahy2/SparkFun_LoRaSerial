@@ -2032,7 +2032,7 @@ bool commandSetOrDisplayValue(const COMMAND_ENTRY * command, const char * buffer
           *(uint16_t *)(command->setting) = (uint16_t)settingValue;
         break;
       case TYPE_LATCHING_MASK:
-        valid = online.hBridge && command->validate((void *)&settingValue, command->minValue, command->maxValue);
+        valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)
         {
           *(ZONE_T *)(command->setting) &= ~(1 << (commandZone- 1));
