@@ -11,8 +11,6 @@
 
 #define ADD_VC_STATE_NAMES_TABLE
 #include "Sprinkler_Server_Notification.h"
-#include <sys/resource.h>
-#include <sys/time.h>
 #include "WeatherStation.h"
 
 #ifndef POLL_TIMEOUT_USEC
