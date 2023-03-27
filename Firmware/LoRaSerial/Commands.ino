@@ -663,6 +663,12 @@ bool commandAT(const char * commandString)
         //          V
 
       case ('1'): //ATI11 - Display the system runtime
+        if (settings.operatingMode == MODE_VIRTUAL_CIRCUIT)
+        {
+          systemPrint("VC ");
+          systemPrint(myVc);
+          systemPrint(": ");
+        }
         systemPrint("Runtime: ");
         systemPrintU64(runtime.u64);
         systemPrint(", Programmed: ");
