@@ -1761,17 +1761,6 @@ bool issueVcCommands(int vcIndex)
                 break;
 
               case CMD_AT_CMDVC_2:
-                //Determine if the local command processor is idle
-                if (commandProcessorIdle(vcIndex))
-                {
-                  if (DEBUG_PC_CMD_ISSUE)
-                    printf("Migrating AT-CMDVC_2 and ATI31 commands to PC command queue\n");
-                  COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_AT_CMDVC_2);
-                  if (COMMAND_PENDING(virtualCircuitList[vcIndex].commandQueue, CMD_ATI31))
-                    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI31);
-                  return true;
-                }
-                virtualCircuitList[vcIndex].activeCommand = CMD_LIST_SIZE;
                 return true;
 
               case CMD_ATI31:
