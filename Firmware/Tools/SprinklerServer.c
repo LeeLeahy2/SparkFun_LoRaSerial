@@ -242,7 +242,7 @@ typedef struct _VIRTUAL_CIRCUIT
 
 uint32_t commandProcessorRunning;
 bool commandStatus;
-ZONE_T configureZones[MAX_VC];
+ZONE_T configureSolenoids[MAX_VC];
 char * controllerIds[MAX_VC];
 char * controllerNames[MAX_VC];
 int controllerZones[MAX_VC];
@@ -1787,7 +1787,7 @@ bool issueVcCommands(int vcIndex)
                                 CMD_ATI89);
 
                   //Configure the sprinkler controller to properly drive the zone solenoids
-                  configureZones[vcIndex] = ZONE_MASK;
+                  configureSolenoids[vcIndex] = ZONE_MASK;
                   manualZones[vcIndex] = ZONE_MASK;
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
@@ -1861,16 +1861,16 @@ bool issueVcCommands(int vcIndex)
                 {
                   //Determine if this zone needs configuration
                   zoneBit = 1 << zoneIndex;
-                  if ((configureZones[vcIndex] | manualZones[vcIndex]) & zoneBit)
+                  if ((configureSolenoids[vcIndex] | manualZones[vcIndex]) & zoneBit)
                   {
                     //Send the command to select the zone
                     sprintf(vcCommandBuffer[vcIndex], "%s%d", SET_COMMAND_ZONE, zoneIndex + 1);
                     sendVcCommand(vcCommandBuffer[vcIndex], vcIndex);
 
                     //Issue the command to select the solenoid type
-                    if (configureZones[vcIndex] & zoneBit)
+                    if (configureSolenoids[vcIndex] & zoneBit)
                     {
-                      configureZones[vcIndex] &= ~zoneBit;
+                      configureSolenoids[vcIndex] &= ~zoneBit;
                       solenoidType[vcIndex] = (latchingSolenoid[vcIndex] >> zoneIndex) & 1;
                       COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                     virtualCircuitList[vcIndex].commandTimer,
@@ -1915,7 +1915,7 @@ bool issueVcCommands(int vcIndex)
               case COMPLETE_ZONE_CONFIGURATION:
                 COMMAND_COMPLETE(virtualCircuitList[vcIndex].commandQueue,
                                  virtualCircuitList[vcIndex].activeCommand);
-                if (configureZones[vcIndex] | manualZones[vcIndex])
+                if (configureSolenoids[vcIndex] | manualZones[vcIndex])
                 {
                   //Configure the next zone
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
@@ -2431,7 +2431,7 @@ void compareSolenoidTypes(ZONE_T * previous, ZONE_T * new)
     if (delta)
     {
       //Set the zones that need updating
-      configureZones[vcIndex] = delta;
+      configureSolenoids[vcIndex] = delta;
 
       //Issue the commands to change the solenoid type
       COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
