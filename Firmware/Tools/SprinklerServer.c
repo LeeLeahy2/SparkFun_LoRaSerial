@@ -1747,6 +1747,7 @@ bool issueVcCommands(int vcIndex)
                 {
                   //Mark the list as empty to allow this entry to be executed again
                   virtualCircuitList[vcIndex].activeCommand = CMD_LIST_SIZE;
+                  virtualCircuitList[vcIndex].commandTimer = timeoutCount;
                   return true;
                 }
 
