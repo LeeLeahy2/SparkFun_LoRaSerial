@@ -1100,13 +1100,13 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
         printf("VC %d ALIVE\n", srcVc);
       COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
                     virtualCircuitList[srcVc].commandTimer,
-                    CMD_AT_CMDVC);
+                    CMD_WAIT_CONNECTED);
       COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
                     virtualCircuitList[srcVc].commandTimer,
                     CMD_ATC);
       COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
                     virtualCircuitList[srcVc].commandTimer,
-                    CMD_WAIT_CONNECTED);
+                    CMD_AT_CMDVC);
     }
 
     if (DISPLAY_VC_STATE)
@@ -1150,30 +1150,6 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     }
     if (DISPLAY_VC_STATE)
       printf("======= VC %d CONNECTED ======\n", srcVc);
-    if (srcVc != myVc)
-    {
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_AT_CMDVC_2);
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_ATI31);
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_GET_CLIENT_MODEL);
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_ATI_2);
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_ATI8_2);
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_ATI11);
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CHECK_FOR_UPDATE);
-    }
     break;
   }
 
@@ -1730,9 +1706,9 @@ bool issueVcCommands(int vcIndex)
                 {
                   if (DEBUG_PC_CMD_ISSUE)
                     printf("Migrating AT-CMDVC=%d and ATC commands to PC command queue\n", vcIndex);
-                  COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_AT_CMDVC);
                   if (COMMAND_PENDING(virtualCircuitList[vcIndex].commandQueue, CMD_ATC))
                     COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATC);
+                  COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_AT_CMDVC);
                   return true;
                 }
                 virtualCircuitList[vcIndex].activeCommand = CMD_LIST_SIZE;
@@ -1755,9 +1731,37 @@ bool issueVcCommands(int vcIndex)
                 COMMAND_COMPLETE(virtualCircuitList[vcIndex].commandQueue,
                                  virtualCircuitList[vcIndex].activeCommand);
 
+                //Get the sprinkler controller information
+                if (vcIndex != myVc)
+                {
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CHECK_FOR_UPDATE);
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_ATI11);
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_ATI8_2);
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_ATI_2);
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_GET_CLIENT_MODEL);
+                }
+
                 //Get the VC state
-                COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_AT_CMDVC_2);
+                if (vcIndex != myVc)
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_ATI31);
                 COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI31);
+                if (vcIndex != myVc)
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_AT_CMDVC_2);
+                COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_AT_CMDVC_2);
                 break;
 
               case CMD_AT_CMDVC_2:
@@ -1784,34 +1788,26 @@ bool issueVcCommands(int vcIndex)
                 return true;
 
               case CHECK_FOR_UPDATE:
+                //Done with the CHECK_FOR_UPDATE command
+                COMMAND_COMPLETE(virtualCircuitList[vcIndex].commandQueue,
+                                 virtualCircuitList[vcIndex].activeCommand);
+
+                //Determine if the sprinkler controller needs to be programmed
                 if ((!virtualCircuitList[vcIndex].programUpdated)
                   || (virtualCircuitList[vcIndex].programUpdated > virtualCircuitList[vcIndex].programmed))
                 {
+                  //Complete the programming
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_AT_DISABLE_CONTROLLER);
+                                PROGRAMMING_COMPLETED);
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_AT_DAY_OF_WEEK);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_AT_TIME_OF_DAY);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_ATI89);
+                                CMD_ATI12);
 
-                  //Configure the sprinkler controller to properly drive the zone solenoids
-                  configureSolenoids[vcIndex] = ZONE_MASK;
-                  manualZones[vcIndex] = ZONE_MASK;
+                  //Make sure the sprinkler controller is enabled
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SELECT_ZONE);
-
-                  //Set the start times for each day of the week
-                  setStartTimes[vcIndex] = (1 << DAYS_IN_WEEK) - 1;
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_DAY_OF_WEEK);
+                                CMD_AT_ENABLE_CONTROLLER);
 
                   //Set the duration for all of the zones for each day of the week
                   durationBase = vcIndex * DAYS_IN_WEEK * ZONE_NUMBER_MAX;
@@ -1820,23 +1816,33 @@ bool issueVcCommands(int vcIndex)
                                 virtualCircuitList[vcIndex].commandTimer,
                                 CMD_SET_DAY_OF_WEEK_2);
 
-                  //Make sure the sprinkler controller is enabled
+                  //Set the start times for each day of the week
+                  setStartTimes[vcIndex] = (1 << DAYS_IN_WEEK) - 1;
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_AT_ENABLE_CONTROLLER);
+                                CMD_SET_DAY_OF_WEEK);
 
-                  //Complete the programming
+                  //Configure the sprinkler controller to properly drive the zone solenoids
+                  configureSolenoids[vcIndex] = ZONE_MASK;
+                  manualZones[vcIndex] = ZONE_MASK;
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_ATI12);
+                                CMD_SELECT_ZONE);
+
+                  //Set the time of day
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                PROGRAMMING_COMPLETED);
+                                CMD_ATI89);
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_AT_TIME_OF_DAY);
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_AT_DAY_OF_WEEK);
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_AT_DISABLE_CONTROLLER);
                 }
-
-                //Done with the CHECK_FOR_UPDATE command
-                COMMAND_COMPLETE(virtualCircuitList[vcIndex].commandQueue,
-                                 virtualCircuitList[vcIndex].activeCommand);
                 return true;
 
               case CMD_AT_DISABLE_CONTROLLER:
@@ -1881,15 +1887,10 @@ bool issueVcCommands(int vcIndex)
                     sprintf(vcCommandBuffer[vcIndex], "%s%d", SET_COMMAND_ZONE, zoneIndex + 1);
                     sendVcCommand(vcCommandBuffer[vcIndex], vcIndex);
 
-                    //Issue the command to select the solenoid type
-                    if (configureSolenoids[vcIndex] & zoneBit)
-                    {
-                      configureSolenoids[vcIndex] &= ~zoneBit;
-                      solenoidType[vcIndex] = (latchingSolenoid[vcIndex] >> zoneIndex) & 1;
-                      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                    virtualCircuitList[vcIndex].commandTimer,
-                                    CMD_SELECT_SOLENOID);
-                    }
+                    //Complete the sequence for this zone
+                    COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                  virtualCircuitList[vcIndex].commandTimer,
+                                  COMPLETE_ZONE_CONFIGURATION);
 
                     //Issue the command to manually control the zone
                     if (manualZones[vcIndex] & zoneBit)
@@ -1901,10 +1902,15 @@ bool issueVcCommands(int vcIndex)
                                     CMD_SET_MANUAL_ON);
                     }
 
-                    //Complete the sequence for this zone
-                    COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                  virtualCircuitList[vcIndex].commandTimer,
-                                  COMPLETE_ZONE_CONFIGURATION);
+                    //Issue the command to select the solenoid type
+                    if (configureSolenoids[vcIndex] & zoneBit)
+                    {
+                      configureSolenoids[vcIndex] &= ~zoneBit;
+                      solenoidType[vcIndex] = (latchingSolenoid[vcIndex] >> zoneIndex) & 1;
+                      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                    virtualCircuitList[vcIndex].commandTimer,
+                                    CMD_SELECT_SOLENOID);
+                    }
                     return true;
                   }
                 }
@@ -1958,10 +1964,10 @@ bool issueVcCommands(int vcIndex)
                   dayNumber[vcIndex] = dayIndex;
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_START_TIME);
+                                CMD_SET_ALL_START_TIMES);
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ALL_START_TIMES);
+                                CMD_SET_START_TIME);
                   return true;
                 }
                 COMMAND_COMPLETE(virtualCircuitList[vcIndex].commandQueue,
@@ -2042,10 +2048,10 @@ bool issueVcCommands(int vcIndex)
                   zoneNumber[vcIndex] = zoneIndex + 1;
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ZONE_DURATION);
+                                CMD_SET_ALL_DURATIONS);
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ALL_DURATIONS);
+                                CMD_SET_ZONE_DURATION);
                   return true;
                 }
                 COMMAND_COMPLETE(virtualCircuitList[vcIndex].commandQueue,
@@ -2072,10 +2078,10 @@ bool issueVcCommands(int vcIndex)
                   //Set the duration for the next zone
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SELECT_ZONE_2);
+                                CMD_SET_ALL_DURATIONS);
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ALL_DURATIONS);
+                                CMD_SELECT_ZONE_2);
                   return true;
                 }
                 if (dayNumber[vcIndex] < (DAYS_IN_WEEK- 1))
@@ -2083,10 +2089,10 @@ bool issueVcCommands(int vcIndex)
                   //Configure the next zone
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_DAY_OF_WEEK_2);
+                                CMD_SET_ALL_DURATIONS);
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ALL_DURATIONS);
+                                CMD_SET_DAY_OF_WEEK_2);
                   return true;
                 }
                 break;
@@ -2392,13 +2398,13 @@ printf("delta: 0x%02x\n", delta);
       //Issue the commands to manually control the zone valve
       COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                     virtualCircuitList[vcIndex].commandTimer,
-                    CMD_SELECT_ZONE);
+                    PROGRAMMING_COMPLETED);
       COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                     virtualCircuitList[vcIndex].commandTimer,
                     CMD_ATI12);
       COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                     virtualCircuitList[vcIndex].commandTimer,
-                    PROGRAMMING_COMPLETED);
+                    CMD_SELECT_ZONE);
 
       //Mark this VC as needing updating
       virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
@@ -2450,13 +2456,13 @@ void compareSolenoidTypes(ZONE_T * previous, ZONE_T * new)
       //Issue the commands to change the solenoid type
       COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                     virtualCircuitList[vcIndex].commandTimer,
-                    CMD_SELECT_ZONE);
+                    PROGRAMMING_COMPLETED);
       COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                     virtualCircuitList[vcIndex].commandTimer,
                     CMD_ATI12);
       COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                     virtualCircuitList[vcIndex].commandTimer,
-                    PROGRAMMING_COMPLETED);
+                    CMD_SELECT_ZONE);
 
       //Mark this VC as needing updating
       virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
@@ -2537,13 +2543,13 @@ void compareSprinklerStartTimes(int32_t * previous, int32_t * new)
         //Issue the commands to change the solenoid type
         COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                       virtualCircuitList[vcIndex].commandTimer,
-                      CMD_SET_DAY_OF_WEEK);
+                      PROGRAMMING_COMPLETED);
         COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                       virtualCircuitList[vcIndex].commandTimer,
                       CMD_ATI12);
         COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                       virtualCircuitList[vcIndex].commandTimer,
-                      PROGRAMMING_COMPLETED);
+                      CMD_SET_DAY_OF_WEEK);
 
         //Mark this VC as needing updating
         virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
@@ -2613,13 +2619,13 @@ void compareZoneDurations(int32_t * previous, int32_t * new)
           //Issue the commands to change the solenoid type
           COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                         virtualCircuitList[vcIndex].commandTimer,
-                        CMD_SET_DAY_OF_WEEK_2);
+                        PROGRAMMING_COMPLETED);
           COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                         virtualCircuitList[vcIndex].commandTimer,
                         CMD_ATI12);
           COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                         virtualCircuitList[vcIndex].commandTimer,
-                        PROGRAMMING_COMPLETED);
+                        CMD_SET_DAY_OF_WEEK_2);
 
           //Mark this VC as needing updating
           virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
@@ -2754,15 +2760,16 @@ int main(int argc, char **argv)
 
     //Perform the initialization commands
     pcCommandTimer = 1;
-    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI30); //Get myVC
-    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_GET_SERVER_MODEL);
-    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI);   //Get Radio type
-    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI8);  //Get Radio unique ID
     COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATA);   //Get all the VC states
+    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI8);  //Get Radio unique ID
+    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI);   //Get Radio type
+    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_GET_SERVER_MODEL);
+    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI30); //Get myVC
 
     //Break the links if requested
     if (breakLinks)
       COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATB); //Break all the VC links
+
     //Initialize the weather station files
     status = initWeatherStation();
     if (status)
