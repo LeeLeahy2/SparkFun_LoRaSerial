@@ -1490,6 +1490,10 @@ int radioToHost()
     else if (header->radio.destVc == PC_DATA_NACK)
       radioDataNack(header, data, length);
 
+    //Display radio runtime
+    else if (header->radio.destVc == PC_RUNTIME)
+      radioRuntime(header, data, length);
+
     //Display received messages
     else if ((header->radio.destVc == myVc) || (header->radio.destVc == VC_BROADCAST))
     {
