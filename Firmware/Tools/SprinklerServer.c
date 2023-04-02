@@ -1022,7 +1022,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   //Display the state if requested
   if (DISPLAY_STATE_TRANSITION || (newState == VC_STATE_LINK_DOWN)
     || (previousState == VC_STATE_LINK_DOWN)
-    || (virtualCircuitList[srcVc].activeCommand < CMD_LIST_SIZE))
+    || ((newState != previousState) && (virtualCircuitList[srcVc].activeCommand < CMD_LIST_SIZE)))
     printf("VC%d: %s --> %s\n", srcVc, vcStateNames[previousState], vcStateNames[newState]);
 
   //Save the LoRaSerial radio's unique ID
