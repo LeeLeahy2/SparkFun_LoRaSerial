@@ -26,52 +26,9 @@ void sprinklerControllerBegin()
   turnOffAllZones();
 }
 
-void adjustTimeOfDay()
-{
-  //Ensure that the previousTimestampOffset is non-zero
-  //Adjust so that zero is added to time on the next update unless timestampOffset
-  //is updated first
-  if (virtualCircuitList[VC_SERVER].vcState >= VC_STATE_LINK_ALIVE)
-  {
-    if (timestampOffset == 1)
-      previousTimestampOffset = 2;
-    else
-      previousTimestampOffset = 1;
-    timeOfDay -= previousTimestampOffset;
-    previousTimestampOffset = timestampOffset - previousTimestampOffset;
-  }
-
-  //Make sure that the correct schedule gets copied
-  if ((!scheduleActive) && (!zoneOnDuration))
-  {
-    scheduleReady = false;
-    scheduleCopied = false;
-  }
-}
-
-void updateTimeOfDay()
-{
-  uint32_t currentTime;
-  uint32_t offset;
-  static uint32_t previousTime;
-
-  //Adjust clocks based upon the updated timestampOffset
-  if (!previousTimestampOffset)
-    previousTimestampOffset = timestampOffset;
-  offset = timestampOffset - previousTimestampOffset;
-  previousTimestampOffset = timestampOffset;
-
-  //Update the time
-  currentTime = millis();
-  timeOfDay += currentTime + offset - previousTime;
-  previousTime = currentTime;
-  if (timeOfDay >= MILLISECONDS_IN_A_DAY)
-  {
-    dayOfWeek = (dayOfWeek + 1) % 7;
-    timeOfDay -= MILLISECONDS_IN_A_DAY;
-    scheduleCopied = false;
-  }
-}
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+//Update routine called during idle loop
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 /*
         Day
@@ -286,218 +243,55 @@ void updateZones()
     updateSprinklerSchedule(waterToday);
 }
 
-void quadRelayOffline()
-{
-  //Report error back to the server
-  //Delay for an hour
-  //Reboot
-}
-
-uint8_t zoneMaskToZoneNumber(ZONE_T zoneMask)
-{
-  uint8_t zone;
-
-  //Determine which zone is enabled
-  if (zoneMask)
-    for (zone = 0; zone < ZONE_NUMBER_MAX; zone++) {
-      if (zoneMask & (1 << zone))
-        return zone + 1;
-    }
-
-  //No zone enabled
-  return 0;
-}
-
-void turnOnRelay(ZONE_T zoneMask)
-{
-  ZONE_T previousZoneActive;
-
-  //Get the zone number: 1 - 8
-  zoneNumber = zoneMaskToZoneNumber(zoneMask);
-
-  //Set the active zone
-  previousZoneActive = zoneActive;
-  zoneActive = 1 << (zoneNumber - 1);
-
-  //Update the display
-  if (latchingSolenoid & zoneActive)
-    relayOn |= zoneActive;
-  if (!previousZoneActive)
-    zoneOn |= zoneActive;
-
-  //Output the debug messages
-  if (settings.debugSprinklers)
-  {
-    //Update the relay status
-    if (!previousZoneActive)
-      systemPrintln("--------------------------------------------------");
-    systemPrintTimestamp(timeOfDay);
-    systemPrint(" Relay ");
-    systemPrint(zoneNumber);
-    systemPrint(" ON driving ");
-    systemPrint((latchingSolenoid & zoneActive) ? "DC latching" : "AC");
-    systemPrintln(" solenoid");
-
-    if (!previousZoneActive)
-    {
-      //Update the zone status
-      systemPrintTimestamp(timeOfDay);
-      systemPrint(" Zone ");
-      systemPrint(zoneNumber);
-      systemPrintln(" turning ON");
-    }
-  }
-
-  //Turn on the relay
-  if (online.quadRelay)
-    quadRelay.turnRelayOn(zoneNumber);
-
-  //Determine the solenoid type and pulse duration
-  pulseDuration = 0;
-  if (latchingSolenoid & zoneActive)
-  {
-    //A latching solenoid is in use, apply power for a short pulse.
-    pulseDuration = settings.pulseDuration;
-    pulseStartTime = millis();
-  }
-}
-
-//AC solenoids require power during the entire time the zone is on
-//
-//                 ON                                OFF
-//                  __________________________________               24V
-//AC ______________/                                  \______________ 0V
-//
-//DC latching solenoids need a short pulse to turn on/off the zone
-//
-//                 ON
-//                  ___                                OFF             9V
-//DC ______________/   \______________________________     __________  0V
-//                                                    \___/           -9V
-
-//Turn on the zone
-void turnOnZone(ZONE_T zoneMask)
-{
-  //Use a positive pulse for the DC latching solenoids
-  if (latchingSolenoid & zoneMask)
-    hBridgeOutputVoltage(true);
-
-  //Turn on specified relay
-  onTime = millis();
-  turnOnRelay(zoneMask);
-}
-
-
-//Turn off the zone
-void turnOffZone()
-{
-  //Determine the solenoid type and pulse duration
-  zoneManualPreviousOn = 0;
-  turnWaterOff = true;
-
-  //Update the display
-  zoneOn &= ~zoneActive;
-
-  //Turn off the zone
-  if (latchingSolenoid & zoneActive)
-  {
-    //Output the negative pulse
-    hBridgeOutputVoltage(false);
-    turnOnRelay(zoneActive);
-  }
-  else
-    turnOffRelay();
-}
-
-void turnOffAllZones()
+void updateSprinklerSchedule(bool waterToday)
 {
   int zone;
-  ZONE_T latching;
-  ZONE_T on;
 
-  //Save the latching state
-  latching = latchingSolenoid;
-  on = zoneManualOn;
-
-  //Turn off all the zones
-  zoneManualOn = 0;
-  for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
+  if (waterToday && enableSprinklerController
+    && ((!scheduleCopied) || ((dayOfWeek == scheduleDay) && (timeOfDay < today.scheduleStartTime))))
   {
-    //Turn off this zone
-    zoneActive = 1 << zone;
-    zoneManualOn = 1 << zone;
-    latchingSolenoid = 1 << zone;
-    turnOffZone();
-
-    //Wait for the zone to go off
-    while (zoneActive)
+    //Set the day during which the schedule is being processed
+    scheduleDay = dayOfWeek;
+    scheduleCopied = true;
+    if (timeOfDay < week[dayOfWeek].scheduleStartTime)
     {
-      petWDT();
-      updateZones();
+      //Copy the schedule
+      today = week[dayOfWeek];
+      scheduleReady = true;
+      if (settings.debugSprinklers)
+      {
+        systemPrintTimestamp(timeOfDay);
+        systemPrint(": Copied ");
+        systemPrint(dayName[dayOfWeek]);
+        systemPrintln("'s schedule to the active schedule");
+        systemPrintTimestamp(timeOfDay);
+        systemPrint("Start Time: ");
+        systemPrintTimestamp(today.scheduleStartTime);
+        systemPrintln();
+        for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
+        {
+          //Start this zone
+          if (today.zoneScheduleDuration[zone])
+          {
+            //Display the schedule
+            if (settings.debugSprinklers)
+            {
+              systemPrintTimestamp(timeOfDay);
+              systemPrint(": Zone ");
+              systemPrint(zone + 1);
+              systemPrint(": ");
+              systemPrintTimestamp(today.zoneScheduleDuration[zone]);
+              systemPrintln();
+            }
+          }
+        }
+      }
     }
   }
-
-  //Update the sprinkler controller state
-  zoneManualOn = on;
-  zoneManualPreviousOn = 0;
-  latchingSolenoid = latching;
-
-  //Restart the scheduler
-  scheduleActive = false;
-  scheduleReady = false;
-  scheduleCopied = false;
-  memset((void *)&today, 0, sizeof(today));
 }
 
-void turnOffRelay()
-{
-  uint8_t zone;
-
-  //Get the zone number
-  zone = zoneMaskToZoneNumber(zoneActive);
-
-  //Turn off the relay
-  if (online.quadRelay)
-    quadRelay.turnRelayOff(zoneNumber);
-
-  //Turn off the H-bridge
-  if (latchingSolenoid & zoneActive)
-    hBridgeSetDrive(false, true);
-
-  //Update the display
-  relayOn &= ~zoneActive;
-
-  //Output the debug messages
-  if (settings.debugSprinklers)
-  {
-    if (turnWaterOff)
-    {
-      //Update the zone status
-      systemPrintTimestamp(timeOfDay);
-      systemPrint(" Zone ");
-      systemPrint(zone);
-      systemPrintln(" turning OFF");
-    }
-
-    //Update the relay status
-    systemPrintTimestamp(timeOfDay);
-    systemPrint(" Relay ");
-    systemPrint(zone);
-    systemPrintln(" OFF");
-  }
-
-  //Get ready for the next relay operation
-  if (turnWaterOff)
-  {
-    turnWaterOff = false;
-    zoneNumber = 0;
-    zoneActive = 0;
-    onTime = 0;
-  }
-  pulseDuration = 0;
-  pulseStartTime = 0;
-}
-
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+//Flow (water) measurement in gallons
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 static bool flowDetected;
@@ -560,6 +354,8 @@ void flowSwitchDebounce()
   }
 }
 
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+//H-Bridge control
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 //Initialize the H-bridge
@@ -694,49 +490,272 @@ void hBridgeOutputVoltage(bool positiveVoltage)
   }
 }
 
-void updateSprinklerSchedule(bool waterToday)
-{
-  int zone;
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+//Relay control
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-  if (waterToday && enableSprinklerController
-    && ((!scheduleCopied) || ((dayOfWeek == scheduleDay) && (timeOfDay < today.scheduleStartTime))))
+void turnOffRelay()
+{
+  uint8_t zone;
+
+  //Get the zone number
+  zone = zoneMaskToZoneNumber(zoneActive);
+
+  //Turn off the relay
+  if (online.quadRelay)
+    quadRelay.turnRelayOff(zoneNumber);
+
+  //Turn off the H-bridge
+  if (latchingSolenoid & zoneActive)
+    hBridgeSetDrive(false, true);
+
+  //Update the display
+  relayOn &= ~zoneActive;
+
+  //Output the debug messages
+  if (settings.debugSprinklers)
   {
-    //Set the day during which the schedule is being processed
-    scheduleDay = dayOfWeek;
-    scheduleCopied = true;
-    if (timeOfDay < week[dayOfWeek].scheduleStartTime)
+    if (turnWaterOff)
     {
-      //Copy the schedule
-      today = week[dayOfWeek];
-      scheduleReady = true;
-      if (settings.debugSprinklers)
-      {
-        systemPrintTimestamp(timeOfDay);
-        systemPrint(": Copied ");
-        systemPrint(dayName[dayOfWeek]);
-        systemPrintln("'s schedule to the active schedule");
-        systemPrintTimestamp(timeOfDay);
-        systemPrint("Start Time: ");
-        systemPrintTimestamp(today.scheduleStartTime);
-        systemPrintln();
-        for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
-        {
-          //Start this zone
-          if (today.zoneScheduleDuration[zone])
-          {
-            //Display the schedule
-            if (settings.debugSprinklers)
-            {
-              systemPrintTimestamp(timeOfDay);
-              systemPrint(": Zone ");
-              systemPrint(zone + 1);
-              systemPrint(": ");
-              systemPrintTimestamp(today.zoneScheduleDuration[zone]);
-              systemPrintln();
-            }
-          }
-        }
-      }
+      //Update the zone status
+      systemPrintTimestamp(timeOfDay);
+      systemPrint(" Zone ");
+      systemPrint(zone);
+      systemPrintln(" turning OFF");
+    }
+
+    //Update the relay status
+    systemPrintTimestamp(timeOfDay);
+    systemPrint(" Relay ");
+    systemPrint(zone);
+    systemPrintln(" OFF");
+  }
+
+  //Get ready for the next relay operation
+  if (turnWaterOff)
+  {
+    turnWaterOff = false;
+    zoneNumber = 0;
+    zoneActive = 0;
+    onTime = 0;
+  }
+  pulseDuration = 0;
+  pulseStartTime = 0;
+}
+
+void turnOnRelay(ZONE_T zoneMask)
+{
+  ZONE_T previousZoneActive;
+
+  //Get the zone number: 1 - 8
+  zoneNumber = zoneMaskToZoneNumber(zoneMask);
+
+  //Set the active zone
+  previousZoneActive = zoneActive;
+  zoneActive = 1 << (zoneNumber - 1);
+
+  //Update the display
+  if (latchingSolenoid & zoneActive)
+    relayOn |= zoneActive;
+  if (!previousZoneActive)
+    zoneOn |= zoneActive;
+
+  //Output the debug messages
+  if (settings.debugSprinklers)
+  {
+    //Update the relay status
+    if (!previousZoneActive)
+      systemPrintln("--------------------------------------------------");
+    systemPrintTimestamp(timeOfDay);
+    systemPrint(" Relay ");
+    systemPrint(zoneNumber);
+    systemPrint(" ON driving ");
+    systemPrint((latchingSolenoid & zoneActive) ? "DC latching" : "AC");
+    systemPrintln(" solenoid");
+
+    if (!previousZoneActive)
+    {
+      //Update the zone status
+      systemPrintTimestamp(timeOfDay);
+      systemPrint(" Zone ");
+      systemPrint(zoneNumber);
+      systemPrintln(" turning ON");
     }
   }
+
+  //Turn on the relay
+  if (online.quadRelay)
+    quadRelay.turnRelayOn(zoneNumber);
+
+  //Determine the solenoid type and pulse duration
+  pulseDuration = 0;
+  if (latchingSolenoid & zoneActive)
+  {
+    //A latching solenoid is in use, apply power for a short pulse.
+    pulseDuration = settings.pulseDuration;
+    pulseStartTime = millis();
+  }
+}
+
+void quadRelayOffline()
+{
+  //Report error back to the server
+  //Delay for an hour
+  //Reboot
+}
+
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+//Time adjustment code
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+void adjustTimeOfDay()
+{
+  //Ensure that the previousTimestampOffset is non-zero
+  //Adjust so that zero is added to time on the next update unless timestampOffset
+  //is updated first
+  if (virtualCircuitList[VC_SERVER].vcState >= VC_STATE_LINK_ALIVE)
+  {
+    if (timestampOffset == 1)
+      previousTimestampOffset = 2;
+    else
+      previousTimestampOffset = 1;
+    timeOfDay -= previousTimestampOffset;
+    previousTimestampOffset = timestampOffset - previousTimestampOffset;
+  }
+
+  //Make sure that the correct schedule gets copied
+  if ((!scheduleActive) && (!zoneOnDuration))
+  {
+    scheduleReady = false;
+    scheduleCopied = false;
+  }
+}
+
+void updateTimeOfDay()
+{
+  uint32_t currentTime;
+  uint32_t offset;
+  static uint32_t previousTime;
+
+  //Adjust clocks based upon the updated timestampOffset
+  if (!previousTimestampOffset)
+    previousTimestampOffset = timestampOffset;
+  offset = timestampOffset - previousTimestampOffset;
+  previousTimestampOffset = timestampOffset;
+
+  //Update the time
+  currentTime = millis();
+  timeOfDay += currentTime + offset - previousTime;
+  previousTime = currentTime;
+  if (timeOfDay >= MILLISECONDS_IN_A_DAY)
+  {
+    dayOfWeek = (dayOfWeek + 1) % 7;
+    timeOfDay -= MILLISECONDS_IN_A_DAY;
+    scheduleCopied = false;
+  }
+}
+
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+//Zone control
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+void turnOffAllZones()
+{
+  int zone;
+  ZONE_T latching;
+  ZONE_T on;
+
+  //Save the latching state
+  latching = latchingSolenoid;
+  on = zoneManualOn;
+
+  //Turn off all the zones
+  zoneManualOn = 0;
+  for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
+  {
+    //Turn off this zone
+    zoneActive = 1 << zone;
+    zoneManualOn = 1 << zone;
+    latchingSolenoid = 1 << zone;
+    turnOffZone();
+
+    //Wait for the zone to go off
+    while (zoneActive)
+    {
+      petWDT();
+      updateZones();
+    }
+  }
+
+  //Update the sprinkler controller state
+  zoneManualOn = on;
+  zoneManualPreviousOn = 0;
+  latchingSolenoid = latching;
+
+  //Restart the scheduler
+  scheduleActive = false;
+  scheduleReady = false;
+  scheduleCopied = false;
+  memset((void *)&today, 0, sizeof(today));
+}
+
+//Turn off the zone
+void turnOffZone()
+{
+  //Determine the solenoid type and pulse duration
+  zoneManualPreviousOn = 0;
+  turnWaterOff = true;
+
+  //Update the display
+  zoneOn &= ~zoneActive;
+
+  //Turn off the zone
+  if (latchingSolenoid & zoneActive)
+  {
+    //Output the negative pulse
+    hBridgeOutputVoltage(false);
+    turnOnRelay(zoneActive);
+  }
+  else
+    turnOffRelay();
+}
+
+//AC solenoids require power during the entire time the zone is on
+//
+//                 ON                                OFF
+//                  __________________________________               24V
+//AC ______________/                                  \______________ 0V
+//
+//DC latching solenoids need a short pulse to turn on/off the zone
+//
+//                 ON
+//                  ___                                OFF             9V
+//DC ______________/   \______________________________     __________  0V
+//                                                    \___/           -9V
+
+//Turn on the zone
+void turnOnZone(ZONE_T zoneMask)
+{
+  //Use a positive pulse for the DC latching solenoids
+  if (latchingSolenoid & zoneMask)
+    hBridgeOutputVoltage(true);
+
+  //Turn on specified relay
+  onTime = millis();
+  turnOnRelay(zoneMask);
+}
+
+uint8_t zoneMaskToZoneNumber(ZONE_T zoneMask)
+{
+  uint8_t zone;
+
+  //Determine which zone is enabled
+  if (zoneMask)
+    for (zone = 0; zone < ZONE_NUMBER_MAX; zone++) {
+      if (zoneMask & (1 << zone))
+        return zone + 1;
+    }
+
+  //No zone enabled
+  return 0;
 }
