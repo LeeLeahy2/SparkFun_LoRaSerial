@@ -19,6 +19,8 @@ void sprinklerControllerBegin()
   hBridgeBegin(); //Start the H-bridge
 
   flowSensorBegin(); //Start the flow sensor
+  nvmFlowRead(); //Read the flow sensor values
+  startGallons = gallons.total;
 
   beginDisplay(); //Start display first to be able to display any errors
 
@@ -189,6 +191,18 @@ void updateZones()
   {
     if (scheduleActive || (timeOfDay >= today.scheduleStartTime))
     {
+      //Display the water use
+      if (settings.debugFlow)
+      {
+        systemPrint("VC ");
+        systemPrint(myVc);
+        systemPrint(": ");
+        systemPrint(gallons.total - startGallons);
+        systemPrintln(" leaked gallons");
+        outputSerialData(true);
+      }
+      startGallons = gallons.total;
+
       zoneOnDuration = 0;
       if (scheduleReady)
       {
@@ -232,7 +246,10 @@ void updateZones()
 
       //Done if watering is done for all of the zones
       if (!zoneOnDuration)
+      {
         scheduleActive = false;
+        nvmFlowWrite();
+      }
     }
   }
 
@@ -342,11 +359,14 @@ void flowSwitchDebounce()
         gallons.zone[zoneNumber - 1]++;
       }
       else
+      {
         gallons.leaked++;
-      flowDetected = true;
-      online.flowMeter = true;
+        nvmFlowWrite();
+      }
 
       //Pulse the LED when flow is detected
+      flowDetected = true;
+      online.flowMeter = true;
       blinkFlowLed(true);
     }
     else if (flowDetected && (!inputValue))
@@ -702,12 +722,31 @@ void turnOffAllZones()
 //Turn off the zone
 void turnOffZone()
 {
+  uint8_t zone;
+
   //Determine the solenoid type and pulse duration
   zoneManualPreviousOn = 0;
   turnWaterOff = true;
 
   //Update the display
   zoneOn &= ~zoneActive;
+
+  //Display the water use
+  if (settings.debugFlow)
+  {
+    //Get the zone number
+    zone = zoneMaskToZoneNumber(zoneActive);
+
+    systemPrint("VC ");
+    systemPrint(myVc);
+    systemPrint(" zone ");
+    systemPrint(zone);
+    systemPrint(": ");
+    systemPrint(gallons.total - startGallons);
+    systemPrintln(" gallons");
+    outputSerialData(true);
+  }
+  startGallons = gallons.total;
 
   //Turn off the zone
   if (latchingSolenoid & zoneActive)

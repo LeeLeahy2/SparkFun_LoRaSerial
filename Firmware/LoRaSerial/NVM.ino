@@ -237,3 +237,35 @@ void nvmErase()
   //Finish the write
   arch.eepromCommit();
 }
+
+//Read the flow data from the NVM
+void nvmFlowRead()
+{
+  WATER_USE temp;
+
+  //Read the flow data the flash
+  EEPROM.get(NVM_FLOW_OFFSET, gallons);
+  if (settings.debugNvm || settings.debugFlow)
+  {
+    systemPrintln("Flow data read from EEPROM");
+    dumpBuffer((uint8_t *)&gallons, sizeof(gallons));
+    outputSerialData(true);
+  }
+
+  //Check for valid data
+  memset((void *)&temp, NVM_ERASE_VALUE, sizeof(temp));
+  if (memcmp((void *)&gallons, (void *)&temp, sizeof(gallons)) == 0)
+    memset((void *)&gallons, 0, sizeof(gallons));
+}
+
+//Write the flow data to the NVM
+void nvmFlowWrite()
+{
+  EEPROM.put(NVM_FLOW_OFFSET, gallons);
+  if (settings.debugNvm || settings.debugFlow)
+  {
+    systemPrintln("Flow data written to EEPROM");
+    dumpBuffer((uint8_t *)&gallons, sizeof(gallons));
+    outputSerialData(true);
+  }
+}

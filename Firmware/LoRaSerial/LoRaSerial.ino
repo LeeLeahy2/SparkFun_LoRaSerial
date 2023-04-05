@@ -603,6 +603,7 @@ int8_t hBridgeLastVoltage;        //-1 = Negative, 0 = Off, 1 = Positive
 
 //Flow sensor
 WATER_USE gallons;                //Measured water use
+int startGallons;                 //Gallons at the start
 
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 

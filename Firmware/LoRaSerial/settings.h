@@ -570,6 +570,7 @@ typedef struct struct_settings {
   bool displayMilliseconds = false; //Show the milliseconds on the display
   uint16_t displayUpdate = 125; //Milliseconds to update the display
   uint16_t pulseDuration = 250; //Milliseconds for latching solenoid pulse duration
+  bool debugFlow = false; //Enable debugging of the flow
   bool debugHBridge = false; //Enable debugging of the H-Bridge
   uint16_t splashScreenDelay = 3000; //Milliseconds to display the splash screen
   bool useFlowLed = true; //Blue LED: true: Gallon flow, false: HEARTBEAT packet

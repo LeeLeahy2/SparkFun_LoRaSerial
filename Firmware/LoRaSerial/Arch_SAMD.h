@@ -7,6 +7,7 @@ WDTZero myWatchDog;
 
 #define NVM_ERASE_VALUE         0xff
 #define NVM_UNIQUE_ID_OFFSET    (EEPROM_EMULATION_SIZE - (MAX_VC * UNIQUE_ID_BYTES))
+#define NVM_FLOW_OFFSET         (NVM_UNIQUE_ID_OFFSET - sizeof(gallons))
 
 void flowSensorIsr();
 

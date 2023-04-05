@@ -228,6 +228,7 @@ bool commandAT(const char * commandString)
         }
 
         reportOK();
+        nvmFlowWrite();
         commandReset();
         return true;
     }
