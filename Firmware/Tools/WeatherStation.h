@@ -61,8 +61,10 @@
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 extern gid_t gid;
+extern time_t now;
 int radio;
 fd_set readfds;
+extern struct tm * timeCurrent;
 extern uid_t uid;
 
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-

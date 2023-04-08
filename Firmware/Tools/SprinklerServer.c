@@ -41,11 +41,13 @@
 #define GET_UNIQUE_ID           "ati8"
 #define GET_VC_STATE            "ati31"
 #define GET_VC_STATUS           "ata"
+#define GET_WATER_USE           "ati82"
 #define LINK_RESET_COMMAND      "atz"
 #define MY_VC_ADDRESS           "myVc: "
 #define SET_COMMAND_DAY         "at-CommandDay="
 #define SET_COMMAND_ZONE        "at-CommandZone="
 #define SET_MANUAL_ON           "at-ZoneManualOn="
+#define SET_MSEC_PER_INCH       "at-mSecPerInch="
 #define SET_PROGRAM_COMPLETE    "ati12"
 #define SET_SOLENOID_TYPE       "at-LatchingSolenoid="
 #define SET_START_TIME          "at-StartTime="
@@ -59,6 +61,7 @@
 #define DEBUG_PC_TO_RADIO         0
 #define DEBUG_RADIO_TO_PC         0
 #define DEBUG_SPRINKLER_CHANGES   1
+#define DISPLAY_COLLECTION_TIME   0
 #define DISPLAY_COMMAND_COMPLETE  0
 #define DISPLAY_DATA_ACK          0
 #define DISPLAY_DATA_NACK         1
@@ -67,11 +70,13 @@
 #define DISPLAY_STATE_TRANSITION  0
 #define DISPLAY_UNKNOWN_COMMANDS  0
 #define DISPLAY_VC_STATE          0
+#define DISPLAY_WATER_USE         1
 #define DUMP_RADIO_TO_PC          0
 
 #define DATABASE_DEBUG        0
 
 #define DAYS_IN_WEEK          7
+#define MSEC_PER_INCH_ENTRIES (MAX_VC * ZONE_NUMBER_MAX)
 #define START_TIME_ENTRIES    (MAX_VC * DAYS_IN_WEEK)
 #define DURATION_ENTRIES      (START_TIME_ENTRIES * ZONE_NUMBER_MAX)
 
@@ -179,10 +184,14 @@ typedef enum
   CMD_AT_TIME_OF_DAY,         //Set the time of day
   CMD_ATI89,                  //Display the date and time
 
+  //Get the water use
+  CMD_GET_WATER_USE,          //Get the water use
+
   //Select the solenoids and manual control for each of the zone
   CMD_SELECT_ZONE,            //Select the zone number
   CMD_SELECT_SOLENOID,        //Select the solenoid for the zone
-  CMD_SET_MANUAL_ON,          //Select the manual state of the zone valve
+  CMD_SET_MANUAL_ON,          //Set the manual state of the zone valve
+  CMD_SET_MSEC_PER_INCH,      //Set the milliseconds per inch
   COMPLETE_ZONE_CONFIGURATION,//Verify that all of the zones are configured
 
   //Set the start times
@@ -214,15 +223,10 @@ const char * const commandName[] =
   "CHECK_FOR_UPDATE",
   "AT-EnableController=0",
   "AT-DayOfWeek", "AT-TimeOfDay", "ATI89",
-  "AT-CommandZone", "AT-LatchingSolenoid", "AT-ManualOn", "COMPLETE_ZONE_CONFIGURATION",
+  "ATI82",
+  "AT-CommandZone", "AT-LatchingSolenoid", "AT-ManualOn", "AT-mSecPerInch=", "COMPLETE_ZONE_CONFIGURATION",
   "AT-CommandDay", "AT-StartTime", "CMD_SET_ALL_START_TIMES",
   "AT-CommandDay-2", "AT-CommandZone-2", "AT-ZoneDuration", "CMD_SET_ALL_DURATIONS",
-
-/*
-#define SET_MANUAL_ON           "AT-ZoneManualOn="
-#define SET_ZONE_DURATION       "AT-ZoneDuration="
-*/
-
   "AT-EnableController=1",
   "ATI12", "PROGRAMMING_COMPLETED",
 };
@@ -231,6 +235,9 @@ typedef struct _VIRTUAL_CIRCUIT
 {
   int vcState;
   uint32_t activeCommand;
+  bool collectData[DAYS_IN_WEEK];
+  bool collectData5Am[DAYS_IN_WEEK];
+  int collectionTimeSec[DAYS_IN_WEEK];
   QUEUE_T commandQueue[COMMAND_QUEUE_SIZE];
   uint32_t commandTimer;
   uint64_t programmed;
@@ -238,6 +245,7 @@ typedef struct _VIRTUAL_CIRCUIT
   uint64_t runtime;
   uint8_t uniqueId[UNIQUE_ID_BYTES];
   bool valid;
+  WATER_USE gallons;
 } VIRTUAL_CIRCUIT;
 
 uint32_t commandProcessorRunning;
@@ -255,11 +263,13 @@ int dayNumber[MAX_VC];
 int32_t durationArray[DURATION_ENTRIES];
 bool findMyVc;
 char * host;
+char htmlMessage[16384];
 uint8_t inputBuffer[INPUT_BUFFER_SIZE];
 ZONE_T latchingSolenoid[MAX_VC];
 int manualControl[MAX_VC];
 ZONE_T manualOn[MAX_VC];
 ZONE_T manualZones[MAX_VC];
+uint32_t mSecPerInch[MSEC_PER_INCH_ENTRIES];
 MYSQL * mysql;
 int myVc = VC_SERVER;
 uint8_t outputBuffer[VC_SERIAL_HEADER_BYTES + BUFFER_SIZE];
@@ -272,11 +282,13 @@ int pcCommandVc = MAX_VC;
 uint8_t remoteCommandVc;
 int remoteVc;
 bool setDurations[DURATION_ENTRIES];
+bool setMSecPerInch[MSEC_PER_INCH_ENTRIES];
 int setStartTimes[START_TIME_ENTRIES];
 int solenoidType[MAX_VC];
 int32_t startTimeArray[START_TIME_ENTRIES];
 ZONE_T tempLatching[MAX_VC];
 ZONE_T tempManualOn[MAX_VC];
+uint32_t tempMSecPerInch[MSEC_PER_INCH_ENTRIES];
 int32_t tempStartTimes[START_TIME_ENTRIES];
 int32_t tempZoneDuration[DURATION_ENTRIES];
 uint32_t timeoutCount;
@@ -1219,6 +1231,72 @@ void radioRuntime(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t len
   memcpy(&virtualCircuitList[vcIndex].programmed, &vcMsg->programmed, sizeof(vcMsg->programmed));
 }
 
+void sendLeakWarning()
+{
+  printf("%s\n", htmlMessage);
+}
+
+void updateWaterUse(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t length)
+{
+  WATER_USE deltaGallons;
+  int htmlIndex;
+  int index;
+  static char tempBuffer[sizeof(htmlMessage)];
+  int vcIndex;
+  int zone;
+
+  //Get the water use message
+  vcIndex = header->radio.srcVc & VCAB_NUMBER_MASK;
+  if (length > sizeof(WATER_USE))
+    length = sizeof(WATER_USE);
+
+  //Determine the delta water use
+  memcpy(&deltaGallons, data, length);
+  deltaGallons.total -= virtualCircuitList[vcIndex].gallons.total;
+  deltaGallons.leaked -= virtualCircuitList[vcIndex].gallons.leaked;
+  for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
+    deltaGallons.zone[zone] -= virtualCircuitList[vcIndex].gallons.zone[zone];
+
+  //Check for leak when valves are off
+  //This may be a leak between the flow meter and the valves or one or
+  //more of the valves may not be turning off fully.
+  if (deltaGallons.leaked)
+  {
+    sprintf(tempBuffer, "The sprinkler controller near %s detected a leak of %d gallons with the valves off.  The leak may be between the water flow meter and the valves or possibly one of the valves is not turning off fully.\n",
+           controllerNames[vcIndex], deltaGallons.leaked);
+
+    //Remove #, the PHP comment character
+    htmlIndex = 0;
+    for (index = 0; index < (int)sizeof(tempBuffer); index++)
+    {
+      if (tempBuffer[index] != '#')
+        htmlMessage[htmlIndex++] = tempBuffer[index];
+      if (!tempBuffer[index])
+        break;
+    }
+
+    //Send the email message
+    if (!fork())
+    {
+      sendLeakWarning();
+      exit(0);
+    }
+  }
+
+  //Update the water use
+  memcpy(&virtualCircuitList[vcIndex].gallons, data, length);
+
+  //Display the water use
+  if (DISPLAY_WATER_USE)
+  {
+    printf("VC %d Water Use:\n", vcIndex);
+    printf("    Total Gallons: %d\n", virtualCircuitList[vcIndex].gallons.total);
+    printf("    Leaked Gallons: %d\n", virtualCircuitList[vcIndex].gallons.leaked);
+    for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
+      printf("    Zone  %d Gallons: %d\n", zone + 1, virtualCircuitList[vcIndex].gallons.zone[zone]);
+  }
+}
+
 void radioCommandComplete(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t length)
 {
   int activeCommand;
@@ -1355,13 +1433,23 @@ int commandResponse(uint8_t * data, uint8_t length)
     //Process the message
     //------------------------------
 
-    //Display radio runtime
-    if (header->radio.destVc == PC_RUNTIME)
-      radioRuntime(header, dataStart, length);
+    switch (header->radio.destVc)
+    {
+      //Dump the unknown VC message
+      default:
+        dumpBuffer((uint8_t*)header, length + VC_SERIAL_HEADER_BYTES);
+        break;
 
-    //Dump the unknown VC message
-    else
-      dumpBuffer((uint8_t*)header, length + VC_SERIAL_HEADER_BYTES);
+      //Display radio runtime
+      case PC_RUNTIME:
+        radioRuntime(header, dataStart, length);
+        break;
+
+      //Update the water use
+      case PC_WATER_USE:
+        updateWaterUse(header, dataStart, length);
+        break;
+    }
   } while (data < dataEnd);
   return status;
 }
@@ -1711,7 +1799,7 @@ bool issueVcCommands(int vcIndex)
   uint32_t dayBit;
   int dayIndex;
   int durationBase;
-  int entry;
+  static int entry;
   int index;
   time_t now;
   struct tm * timeStruct;
@@ -1860,6 +1948,11 @@ bool issueVcCommands(int vcIndex)
                                 virtualCircuitList[vcIndex].commandTimer,
                                 CMD_SELECT_ZONE);
 
+                  //Get the previous water use
+                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                                virtualCircuitList[vcIndex].commandTimer,
+                                CMD_GET_WATER_USE);
+
                   //Set the time of day
                   COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
                                 virtualCircuitList[vcIndex].commandTimer,
@@ -1903,6 +1996,11 @@ bool issueVcCommands(int vcIndex)
               case CMD_ATI89:
                 //Display the date and time
                 sendVcCommand(DISPLAY_DATE_TIME, vcIndex);
+                return true;
+
+              case CMD_GET_WATER_USE:
+                //Get the water use
+                sendVcCommand(GET_WATER_USE, vcIndex);
                 return true;
 
               //Select the zone
@@ -1959,6 +2057,12 @@ bool issueVcCommands(int vcIndex)
               case CMD_SET_MANUAL_ON:
                 //Send the command to manually turn on or off the zone valve
                 sprintf(vcCommandBuffer[vcIndex], "%s%d", SET_MANUAL_ON, manualControl[vcIndex]);
+                sendVcCommand(vcCommandBuffer[vcIndex], vcIndex);
+                return true;
+
+              case CMD_SET_MSEC_PER_INCH:
+                //Send the command to set the milliseconds per inch
+                sprintf(vcCommandBuffer[vcIndex], "%s%d", SET_MSEC_PER_INCH, mSecPerInch[entry]);
                 sendVcCommand(vcCommandBuffer[vcIndex], vcIndex);
                 return true;
 
@@ -2235,8 +2339,10 @@ int getControllerNames(MYSQL * mysql, char ** names, char ** ids, int * zones, b
   return status;
 }
 
-int getZoneConfiguration(MYSQL * mysql, ZONE_T * latching, ZONE_T * on, bool debug)
+int getZoneConfiguration(MYSQL * mysql, ZONE_T * latching, ZONE_T * on,
+                         uint32_t * millisPerInch, bool debug)
 {
+  uint32_t factor;
   int index;
   unsigned int onOff;
   MYSQL_RES * results;
@@ -2253,7 +2359,7 @@ int getZoneConfiguration(MYSQL * mysql, ZONE_T * latching, ZONE_T * on, bool deb
 
     //Perform the query
     status = databaseQuery(mysql,
-                           "SELECT VcNumber, ZoneNumber, Latching, ManualOn, SprinklerControllerName FROM view_sprinkler_valve WHERE (VcNumber IS NOT NULL) ORDER BY VcNumber, ZoneNumber",
+                           "SELECT VcNumber, ZoneNumber, Latching, ManualOn, MillisecondsPerInch, SprinklerControllerName FROM view_sprinkler_valve_2 WHERE (VcNumber IS NOT NULL) ORDER BY VcNumber, ZoneNumber",
                            &results, NULL, NULL, NULL, debug);
     if (status)
       break;
@@ -2266,6 +2372,7 @@ int getZoneConfiguration(MYSQL * mysql, ZONE_T * latching, ZONE_T * on, bool deb
           && (databaseGetInteger(row[1], &zone))
           && (databaseGetInteger(row[2], (int *)&type))
           && (databaseGetInteger(row[3], (int *)&onOff))
+          && (databaseGetInteger(row[4], (int *)&factor))
           && (vc < MAX_VC)
           && (zone >= 1) && (zone <= ZONE_NUMBER_MAX)
           && (onOff <= 1))
@@ -2275,6 +2382,8 @@ int getZoneConfiguration(MYSQL * mysql, ZONE_T * latching, ZONE_T * on, bool deb
         latching[vc] |= (type & 1) << index;
         on[vc] &= ~(1 << index);
         on[vc] |= (onOff & 1) << index;
+        mSecPerInch[(vc * ZONE_NUMBER_MAX) + index] = factor;
+        setMSecPerInch[(vc * ZONE_NUMBER_MAX) + index] = true;
         if (DEBUG_SPRINKLER_CHANGES)
           printf("VC: %s, Zone: %s, Latching: %d, On: %d\n", row[0], row[1], type, onOff);
       }
@@ -2289,6 +2398,7 @@ int getZoneConfiguration(MYSQL * mysql, ZONE_T * latching, ZONE_T * on, bool deb
 //Get the sprinkler controller start times
 int getSprinklerControllerStartTimes(MYSQL * mysql, int32_t * startTimeArray, bool debug)
 {
+  int day;
   int dayOfWeek;
   int hours;
   int index;
@@ -2314,6 +2424,17 @@ int getSprinklerControllerStartTimes(MYSQL * mysql, int32_t * startTimeArray, bo
     if (status)
       break;
 
+    //Collect data each morning
+    for (vc = 1; vc < MAX_VC; vc++)
+    {
+      for (dayOfWeek = 0; dayOfWeek < DAYS_IN_WEEK; dayOfWeek++)
+      {
+        virtualCircuitList[vc].collectionTimeSec[dayOfWeek] = 0;
+        virtualCircuitList[vc].collectData[dayOfWeek] = true;
+        virtualCircuitList[vc].collectData5Am[dayOfWeek] = true;
+      }
+    }
+
     //Walk through the results
     while ((row = databaseGetNextRow(results)))
     {
@@ -2335,6 +2456,8 @@ int getSprinklerControllerStartTimes(MYSQL * mysql, int32_t * startTimeArray, bo
                      + (minutes * MILLIS_IN_MINUTE)
                      + (seconds * MILLIS_IN_SECOND);
         startTimeArray[(vc * DAYS_IN_WEEK) + dayOfWeek] = milliseconds;
+        day = (dayOfWeek + 1) % DAYS_IN_WEEK;
+        virtualCircuitList[vc].collectionTimeSec[day] = milliseconds;
       }
     }
 
@@ -2347,6 +2470,7 @@ int getSprinklerControllerStartTimes(MYSQL * mysql, int32_t * startTimeArray, bo
 //Get the sprinkler controller start times
 int getZoneDurations(MYSQL * mysql, int32_t * durationArray, bool debug)
 {
+  int day;
   int dayOfWeek;
   int32_t duration;
   int hours;
@@ -2397,6 +2521,37 @@ int getZoneDurations(MYSQL * mysql, int32_t * durationArray, bool debug)
                      + (seconds * MILLIS_IN_SECOND);
         index = (((vc * DAYS_IN_WEEK) + dayOfWeek) * ZONE_NUMBER_MAX) + zone - 1;
         durationArray[index] = milliseconds;
+        day = (dayOfWeek + 1) % DAYS_IN_WEEK;
+        virtualCircuitList[vc].collectionTimeSec[day] += milliseconds;
+      }
+    }
+
+    //Collect data each morning
+    for (vc = 1; vc < MAX_VC; vc++)
+    {
+      for (dayOfWeek = 0; dayOfWeek < DAYS_IN_WEEK; dayOfWeek++)
+      {
+        //Determine the collection time
+        day = (dayOfWeek + 1) % DAYS_IN_WEEK;
+        virtualCircuitList[vc].collectionTimeSec[day] += 15 * MILLIS_IN_MINUTE;
+        if (virtualCircuitList[vc].collectionTimeSec[day] >= MILLIS_IN_DAY)
+        {
+          virtualCircuitList[vc].collectionTimeSec[day] =
+            ((virtualCircuitList[vc].collectionTimeSec[day] % MILLIS_IN_DAY)
+            / 1000);
+        }
+        else
+          virtualCircuitList[vc].collectionTimeSec[day] = vc * SECS_IN_MINUTE;
+
+        //Display the collection time
+        seconds = virtualCircuitList[vc].collectionTimeSec[day];
+        hours = seconds / SECS_IN_HOUR;
+        seconds -= hours * SECS_IN_HOUR;
+        minutes = seconds / SECS_IN_MINUTE;
+        seconds -= minutes * SECS_IN_MINUTE;
+        if (DISPLAY_COLLECTION_TIME)
+          printf("VC %d %s collection time: %d:%02d:%02d\n",
+                 vc, dayName[day], hours, minutes, seconds);
       }
     }
 
@@ -2460,6 +2615,59 @@ printf("delta: 0x%02x\n", delta);
           previous[vcIndex] &= ~zoneBit;
           previous[vcIndex] |= new[vcIndex] & zoneBit;
         }
+      }
+    }
+  }
+}
+
+//Compare the milliseconds per inch values and issue commands if they are different
+void compareMSecPerInch(uint32_t * previous, uint32_t * new)
+{
+  uint32_t delta;
+  int entry;
+  time_t now;
+  struct tm * timeStruct;
+  int vcIndex;
+  int zoneIndex;
+
+  //Walk the list of VCs
+  for (vcIndex = 0; vcIndex < MAX_VC; vcIndex++)
+  {
+    for (zoneIndex = 0; zoneIndex < ZONE_NUMBER_MAX; zoneIndex++)
+    {
+      entry = (vcIndex * ZONE_NUMBER_MAX) + zoneIndex;
+      delta = previous[entry] - new[entry];
+      if (delta)
+      {
+        //Issue the conversion factor command
+        setMSecPerInch[(vcIndex * ZONE_NUMBER_MAX) + zoneIndex] = true;
+
+        //Issue the commands to manually control the zone valve
+        COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                      virtualCircuitList[vcIndex].commandTimer,
+                      CMD_SELECT_ZONE);
+        COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                      virtualCircuitList[vcIndex].commandTimer,
+                      CMD_ATI12);
+        COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                      virtualCircuitList[vcIndex].commandTimer,
+                      PROGRAMMING_COMPLETED);
+
+        //Mark this VC as needing updating
+        virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
+
+        //Something caused the milliseconds per inch to change for this zone
+        time(&now);
+        timeStruct = localtime(&now);
+        printf ("%d-%02d-%02d %s %d:%02d:%02d: %s zone %d mSecPerInch changed from %d to %d\n",
+                1900 + timeStruct->tm_year, 1 + timeStruct->tm_mon, timeStruct->tm_mday,
+                dayName[timeStruct->tm_wday],
+                timeStruct->tm_hour, timeStruct->tm_min, timeStruct->tm_sec,
+                controllerNames[vcIndex], zoneIndex + 1,
+                previous[entry], new[entry]);
+
+        //Update the milliseconds per inch value
+        previous[entry] = new[entry];
       }
     }
   }
@@ -2666,6 +2874,22 @@ void compareZoneDurations(int32_t * previous, int32_t * new)
   }
 }
 
+void collectWaterData(int vcIndex)
+{
+  //Complete the programming
+  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                virtualCircuitList[vcIndex].commandTimer,
+                PROGRAMMING_COMPLETED);
+  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                virtualCircuitList[vcIndex].commandTimer,
+                CMD_ATI12);
+
+  //Get the water use
+  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
+                virtualCircuitList[vcIndex].commandTimer,
+                CMD_GET_WATER_USE);
+}
+
 int main(int argc, char **argv)
 {
   bool breakLinks;
@@ -2679,6 +2903,7 @@ int main(int argc, char **argv)
   static char notification[256];
   int numfds;
   bool reset;
+  int seconds;
   int status;
   char * terminal;
   struct timeval timeout;
@@ -2829,7 +3054,7 @@ int main(int argc, char **argv)
       break;
 
     //Get the controller configurations
-    status = getZoneConfiguration(mysql, latchingSolenoid, manualOn, debug);
+    status = getZoneConfiguration(mysql, latchingSolenoid, manualOn, mSecPerInch, debug);
     if (status)
       break;
 
@@ -2894,7 +3119,7 @@ int main(int argc, char **argv)
         status = getControllerNames(mysql, controllerNames, controllerIds, controllerZones, debug);
         if (status)
           break;
-        status = getZoneConfiguration(mysql, tempLatching, tempManualOn, debug);
+        status = getZoneConfiguration(mysql, tempLatching, tempManualOn, tempMSecPerInch, debug);
         if (status)
           break;
         status = getSprinklerControllerStartTimes(mysql, tempStartTimes, debug);
@@ -2907,14 +3132,48 @@ int main(int argc, char **argv)
         //Compare the sprinkler controller configurations
         compareSolenoidTypes(latchingSolenoid, tempLatching);
         compareManualOn(manualOn, tempManualOn);
+        compareMSecPerInch(mSecPerInch, tempMSecPerInch);
         compareSprinklerStartTimes(startTimeArray, tempStartTimes);
         compareZoneDurations(durationArray, tempZoneDuration);
       }
 
+      //----------------------------------------
       //Update the files every second
+      //----------------------------------------
+
+      now = time(NULL);
+      timeCurrent = localtime(&now);
       status = updateWeatherStation();
       if (status)
         break;
+
+      //----------------------------------------
+      // Collect the water after watering and at 5 AM
+      //----------------------------------------
+
+      seconds = timeCurrent->tm_sec + (timeCurrent->tm_min * SECS_IN_MINUTE)
+              + (timeCurrent->tm_hour * SECS_IN_HOUR);
+      for (vcIndex = 1; vcIndex < MAX_VC; vcIndex++)
+      {
+        if (virtualCircuitList[vcIndex].valid)
+        {
+          //Get water use after sprinklers finish watering
+          if (virtualCircuitList[vcIndex].collectData[timeCurrent->tm_wday]
+            && (virtualCircuitList[vcIndex].collectionTimeSec[timeCurrent->tm_wday] <= seconds))
+          {
+            virtualCircuitList[vcIndex].collectData[timeCurrent->tm_wday] = false;
+            collectWaterData(vcIndex);
+          }
+
+          //Get water use at 5 AM
+          if (virtualCircuitList[vcIndex].collectData5Am[timeCurrent->tm_wday]
+            && (timeCurrent->tm_hour >= 5))
+          {
+            virtualCircuitList[vcIndex].collectData5Am[timeCurrent->tm_wday] = false;
+            collectWaterData(vcIndex);
+          }
+        }
+      }
 
       //----------------------------------------
       // Check for timeout

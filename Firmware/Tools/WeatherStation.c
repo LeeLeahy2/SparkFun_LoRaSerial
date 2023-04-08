@@ -318,8 +318,6 @@ int updateWeatherStation()
   int8_t deltaCount;
 
   //Update the files every second
-  now = time(NULL);
-  timeCurrent = localtime(&now);
   if (memcmp(&timePrevious, timeCurrent, sizeof(timePrevious)) != 0)
   {
     timePrevious = *timeCurrent;
