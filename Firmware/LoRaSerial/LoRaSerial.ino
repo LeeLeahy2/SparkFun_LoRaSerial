@@ -210,7 +210,14 @@ unsigned long lastPet = 0; //Remebers time of last WDT pet.
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 #include <SparkFun_Qwiic_Relay.h>
 
-Qwiic_Relay quadRelay(0x6d);
+Qwiic_Relay quadRelay0(0x6d);
+Qwiic_Relay quadRelay1(0x6c);
+
+Qwiic_Relay * const relayBoard[2] =
+{
+  &quadRelay0,
+  &quadRelay1,
+};
 
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 

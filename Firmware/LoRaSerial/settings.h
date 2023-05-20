@@ -580,7 +580,8 @@ typedef struct struct_settings {
 struct struct_online {
   bool radio = false;
   bool eeprom = false;
-  bool quadRelay = false;
+  bool quadRelay0 = false;
+  bool quadRelay1 = false;
   bool hBridge = false;
   bool flowMeter = false;
   bool display = false;

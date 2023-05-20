@@ -92,6 +92,10 @@ void updateDisplay()
     {
       lastDisplayTime = currentTime;
 
+      //----------------------------------------
+      //Top line: Time
+      //----------------------------------------
+
       //Compute the time
       getTime(timeOfDay, NULL, &hours, &minutes, &seconds, NULL);
 
@@ -120,17 +124,25 @@ void updateDisplay()
       //Skip to the next line
       yPos += fontHeight + 2;
 
+      //----------------------------------------
+      //2nd line: Zone numbers
+      //----------------------------------------
+
       //Display the zone numbers
-      xPos = 8;
+      xPos = online.quadRelay1 ? 3 : 8;
       for (index = 0; index < ZONE_NUMBER_MAX; index++)
       {
         printChar(xPos, yPos, '1' + index);
-        xPos += Drop_Width + 5;
+        xPos += Drop_Width + (online.quadRelay1 ? 0 : 6);
       }
+
+      //----------------------------------------
+      //3nd line: Icons
+      //----------------------------------------
 
       //Display the drops
       yPos += fontHeight + 2;
-      xPos = 6;
+      xPos = online.quadRelay1 ? 0 : 6;
       for (index = 0; index < ZONE_NUMBER_MAX; index++)
       {
         if (relayOn & (1 << index))
@@ -142,11 +154,15 @@ void updateDisplay()
         }
         else if (zoneOn & (1 << index))
           displayBitmap(xPos, yPos, Drop_Width, Drop_Height, Drop);
-        xPos += Drop_Width + 5;
+        xPos += Drop_Width + (online.quadRelay1 ? 0 : 6);
       }
 
       //Skip to the next line
       yPos += Drop_Height + 2;
+
+      //----------------------------------------
+      //4nd line: Manual / Zone On Time
+      //----------------------------------------
 
       //Display the duration
       if (zoneManualOn)
@@ -190,6 +206,10 @@ void updateDisplay()
 
       //Skip to the next line
       yPos += fontHeight + 2;
+
+      //----------------------------------------
+      //5th line: Milliseconds / Manual time
+      //----------------------------------------
 
       //Display the milliseconds
       if (settings.displayMilliseconds && (zoneOn | relayOn))

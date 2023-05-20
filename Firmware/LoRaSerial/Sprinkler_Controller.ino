@@ -12,9 +12,14 @@ void sprinklerControllerBegin()
 {
   Wire.begin(); //Start I2C
 
-  //Verify connection to quad relay board
-  if(quadRelay.begin())
-    online.quadRelay = true;
+  //Verify connection to quad relay boards
+  if(quadRelay0.begin())
+    online.quadRelay0 = true;
+  if (ZONE_NUMBER_MAX > RELAYS_ON_BOARD)
+  {
+    if(quadRelay1.begin())
+      online.quadRelay1 = true;
+  }
 
   hBridgeBegin(); //Start the H-bridge
 
@@ -80,7 +85,7 @@ void updateZones()
   int zone;
   static bool previousEnableSprinklerControlller;
 
-  if (!online.quadRelay)
+  if (!online.quadRelay0)
     quadRelayOffline();
 
   //Check for disabling the sprinkler controller
@@ -516,14 +521,17 @@ void hBridgeOutputVoltage(bool positiveVoltage)
 
 void turnOffRelay()
 {
+  Qwiic_Relay * quadRelay;
   uint8_t zone;
 
-  //Get the zone number
+  //Get the zone number: 1 - 8
   zone = zoneMaskToZoneNumber(zoneActive);
+  quadRelay = relayBoard[ZONE_TO_BOARD(zone)];
 
   //Turn off the relay
-  if (online.quadRelay)
-    quadRelay.turnRelayOff(zoneNumber);
+  if ((online.quadRelay0 && (zone <= RELAYS_ON_BOARD))
+    || (online.quadRelay1 && (zone > RELAYS_ON_BOARD)))
+    quadRelay->turnRelayOff(ZONE_TO_RELAY(zone));
 
   //Turn off the H-bridge
   if (latchingSolenoid & zoneActive)
@@ -566,9 +574,11 @@ void turnOffRelay()
 void turnOnRelay(ZONE_T zoneMask)
 {
   ZONE_T previousZoneActive;
+  Qwiic_Relay * quadRelay;
 
   //Get the zone number: 1 - 8
   zoneNumber = zoneMaskToZoneNumber(zoneMask);
+  quadRelay = relayBoard[ZONE_TO_BOARD(zoneNumber)];
 
   //Set the active zone
   previousZoneActive = zoneActive;
@@ -604,8 +614,9 @@ void turnOnRelay(ZONE_T zoneMask)
   }
 
   //Turn on the relay
-  if (online.quadRelay)
-    quadRelay.turnRelayOn(zoneNumber);
+  if ((online.quadRelay0 && (zoneNumber <= RELAYS_ON_BOARD))
+    || (online.quadRelay1 && (zoneNumber > RELAYS_ON_BOARD)))
+    quadRelay->turnRelayOn(ZONE_TO_RELAY(zoneNumber));
 
   //Determine the solenoid type and pulse duration
   pulseDuration = 0;

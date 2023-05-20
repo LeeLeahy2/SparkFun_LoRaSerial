@@ -51,6 +51,7 @@ bool commandAT(const char * commandString)
   uint8_t id[UNIQUE_ID_BYTES];
   uint8_t minutes;
   bool printStartTime;
+  Qwiic_Relay * quadRelay;
   uint8_t seconds;
   const char * string;
   unsigned long timer;
@@ -1000,9 +1001,11 @@ bool commandAT(const char * commandString)
 
       case ('6'): //ATI86 - Pulse zone power
         //Turn on the relay
-        if (online.quadRelay)
+        if ((online.quadRelay0 && (commandZone <= RELAYS_ON_BOARD))
+          || (online.quadRelay1 && (commandZone > RELAYS_ON_BOARD)))
         {
-          quadRelay.turnRelayOn(commandZone);
+          quadRelay = relayBoard[ZONE_TO_BOARD(commandZone)];
+          quadRelay->turnRelayOn(ZONE_TO_RELAY(commandZone));
           currentTime = millis();
           while ((millis() - currentTime) < settings.pulseDuration)
           {
@@ -1011,14 +1014,22 @@ bool commandAT(const char * commandString)
               hopChannel();
             petWDT();
           }
-          quadRelay.turnRelayOff(commandZone);
+          quadRelay->turnRelayOff(ZONE_TO_RELAY(commandZone));
         }
         return true;
 
       case ('7'): //ATI87 - Display sprinkler controller status
         systemPrintln("Sprinkler Controller Status");
+        systemPrint("    ");
+        systemPrint(online.quadRelay1 ? 8 : 4);
+        systemPrint(" Zone");
+        if (online.display)
+          systemPrint(" w/Display");
+        systemPrintln();
         systemPrint("    DC Latching Solenoids: ");
         systemPrintln(online.hBridge ? "Supported" : "NOT supported");
+        systemPrint("    Display: ");
+        systemPrintln(online.display ? "In Use" : "Not installed");
         systemPrint("    EEPROM: ");
         systemPrintln(online.eeprom ? "Available" : "Failed to initialize");
         systemPrint("    Flow Meter");
@@ -1026,6 +1037,7 @@ bool commandAT(const char * commandString)
         systemPrint("    H-Bridge: ");
         if (online.hBridge)
         {
+          systemPrint("Installed, ");
           if (hBridgeLastVoltage)
           {
             systemPrint((hBridgeLastVoltage >= 0) ? "Positive" : "Negative");
@@ -1036,9 +1048,10 @@ bool commandAT(const char * commandString)
         }
         else
           systemPrintln("Failed initialization");
-        systemPrintln(online.hBridge ? "Installed" : "Failed initialization");
-        systemPrint("    Quad Relay: ");
-        systemPrintln(online.quadRelay ? "Availalbe" : "Failed to initialize");
+        systemPrint("    Quad Relay 0: ");
+        systemPrintln(online.quadRelay0 ? "Available" : "Failed to initialize");
+        systemPrint("    Quad Relay 1: ");
+        systemPrintln(online.quadRelay1 ? "Available" : "Not installed");
         systemPrint("    Radio: ");
         if (!online.radio)
           systemPrintln("Offline");
@@ -1046,12 +1059,6 @@ bool commandAT(const char * commandString)
           systemPrintln("Connected to Sprinkler Server");
         else
           systemPrintln("Waiting for Sprinkler Server connection");
-        systemPrint("    EEPROM: ");
-        systemPrintln(online.eeprom ? "Available" : "Failed to initialize");
-        systemPrint("    Quad Relay: ");
-        systemPrintln(online.quadRelay ? "Availalbe" : "Failed to initialize");
-        systemPrint("    Display: ");
-        systemPrintln(online.display ? "In Use" : "Not installed");
         systemPrint("    Time Stamp Offset: ");
         systemPrintTimestamp(timestampOffset);
         systemPrintln();
@@ -1065,7 +1072,7 @@ bool commandAT(const char * commandString)
       case ('8'): //ATI88 - Display the sprinkler schedule
         //Determine if the controller is enabled
         systemPrint("Controller: ");
-        if (!online.quadRelay)
+        if (!online.quadRelay0)
           systemPrintln("Broken - Quad relay offline!");
         else
           systemPrintln(enableSprinklerController ? "Enabled" : "Off - Disabled");
@@ -2049,10 +2056,7 @@ bool commandSetOrDisplayValue(const COMMAND_ENTRY * command, const char * buffer
       case TYPE_ZONE_T:
         valid = command->validate((void *)&settingValue, command->minValue, command->maxValue);
         if (valid)
-        {
-          *(ZONE_T *)(command->setting) &= ~(1 << (commandZone- 1));
-          *(ZONE_T *)(command->setting) |= settingValue << (commandZone - 1);
-        }
+          *(ZONE_T *)(command->setting) = settingValue << (commandZone - 1);
         break;
     }
     if (valid == false)
