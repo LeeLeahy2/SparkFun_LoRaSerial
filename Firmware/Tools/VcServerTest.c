@@ -4,6 +4,8 @@
 #include "settings.h"
 
 #define ISSUE_COMMANDS_IN_PARALLEL      1
+#define ISSUE_COMMANDS                  0
+
 #ifndef POLL_TIMEOUT_USEC
 #define POLL_TIMEOUT_USEC       1000
 #endif  // POLL_TIMEOUT_USEC
@@ -82,38 +84,41 @@
   }                                                                   \
 }
 
-#define COMMAND_ISSUE(queue, pollCount, cmd)                          \
-{                                                                     \
-  if (DEBUG_CMD_ISSUE)                                                \
-  {                                                                   \
-    if (!COMMAND_PENDING(queue, cmd))                                 \
-    {                                                                 \
-      if (queue == pcCommandQueue)                                    \
-        printf("PC %s issued\n", commandName[cmd]);                   \
-      else                                                            \
-      {                                                               \
-        int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
-               * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);     \
-        printf("VC %d %s issued\n", vc, commandName[cmd]);            \
-      }                                                               \
-    }                                                                 \
-  }                                                                   \
-                                                                      \
-  /* Place the command in the queue */                                \
-  queue[cmd / QUEUE_T_BITS] |= 1 << (cmd & QUEUE_T_MASK);             \
-                                                                      \
-  /* Timeout the command processor */                                 \
-  if (!commandProcessorRunning)                                       \
-    commandProcessorRunning = STALL_CHECK_COUNT;                      \
-                                                                      \
-  /* Remember when this command was issued */                         \
-  if (!pollCount)                                                     \
-  {                                                                   \
-    if (timeoutCount)                                                 \
-      pollCount = timeoutCount;                                       \
-    else                                                              \
-      pollCount = 1;                                                  \
-  }                                                                   \
+#define COMMAND_ISSUE(queue, pollCount, cmd)                            \
+{                                                                       \
+  if (ISSUE_COMMANDS)                                                   \
+  {                                                                     \
+    if (DEBUG_CMD_ISSUE)                                                \
+    {                                                                   \
+      if (!COMMAND_PENDING(queue, cmd))                                 \
+      {                                                                 \
+        if (queue == pcCommandQueue)                                    \
+          printf("PC %s issued\n", commandName[cmd]);                   \
+        else                                                            \
+        {                                                               \
+          int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
+                 * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);     \
+          printf("VC %d %s issued\n", vc, commandName[cmd]);            \
+        }                                                               \
+      }                                                                 \
+    }                                                                   \
+                                                                        \
+    /* Place the command in the queue */                                \
+    queue[cmd / QUEUE_T_BITS] |= 1 << (cmd & QUEUE_T_MASK);             \
+                                                                        \
+    /* Timeout the command processor */                                 \
+    if (!commandProcessorRunning)                                       \
+      commandProcessorRunning = STALL_CHECK_COUNT;                      \
+                                                                        \
+    /* Remember when this command was issued */                         \
+    if (!pollCount)                                                     \
+    {                                                                   \
+      if (timeoutCount)                                                 \
+        pollCount = timeoutCount;                                       \
+      else                                                              \
+        pollCount = 1;                                                  \
+    }                                                                   \
+  }                                                                     \
 }
 
 #define COMMAND_PENDING(queue,cmd)  ((queue[cmd / QUEUE_T_BITS] >> (cmd & QUEUE_T_MASK)) & 1)
@@ -707,73 +712,78 @@ void radioCommandComplete(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uin
   VC_COMMAND_COMPLETE_MESSAGE * vcMsg;
   uint8_t srcVc;
 
-  //The command processor is still running
-  commandProcessorRunning = STALL_CHECK_COUNT;
-
-  //Validate the srcVc
-  srcVc = header->radio.srcVc;
-  if (srcVc >= PC_REMOTE_COMMAND)
+  if (!ISSUE_COMMANDS)
+    waitingForCommandComplete = false;
+  else
   {
-    if (srcVc < (uint8_t)VC_RSVD_SPECIAL_VCS)
-      srcVc &= VCAB_NUMBER_MASK;
-    else
-      switch(srcVc)
-      {
-      default:
-        fprintf(stderr, "ERROR: Unknown VC: %d (0x%02x)\n", srcVc, srcVc);
-        exit(-2);
-        break;
+    //The command processor is still running
+    commandProcessorRunning = STALL_CHECK_COUNT;
 
-      //Ignore this command
-      case (uint8_t)VC_UNASSIGNED:
-        return;
-      }
-  }
-
-  //Done with this command
-  if (srcVc == myVc)
-  {
-    if (pcActiveCommand < CMD_LIST_SIZE)
+    //Validate the srcVc
+    srcVc = header->radio.srcVc;
+    if (srcVc >= PC_REMOTE_COMMAND)
     {
-      activeCommand = pcActiveCommand;
+      if (srcVc < (uint8_t)VC_RSVD_SPECIAL_VCS)
+        srcVc &= VCAB_NUMBER_MASK;
+      else
+        switch(srcVc)
+        {
+        default:
+          fprintf(stderr, "ERROR: Unknown VC: %d (0x%02x)\n", srcVc, srcVc);
+          exit(-2);
+          break;
 
-      //Done with the PC command
-      COMMAND_COMPLETE(pcCommandQueue, pcActiveCommand);
+        //Ignore this command
+        case (uint8_t)VC_UNASSIGNED:
+          return;
+        }
+    }
 
-      //Determine if a VC command moved to the PC queue
-      if ((pcCommandVc < MAX_VC)
-        && COMMAND_PENDING(virtualCircuitList[pcCommandVc].commandQueue,
-                           activeCommand))
+    //Done with this command
+    if (srcVc == myVc)
+    {
+      if (pcActiveCommand < CMD_LIST_SIZE)
       {
-        //Done with the VC command
-        COMMAND_COMPLETE(virtualCircuitList[pcCommandVc].commandQueue,
-                         virtualCircuitList[pcCommandVc].activeCommand);
+        activeCommand = pcActiveCommand;
+
+        //Done with the PC command
+        COMMAND_COMPLETE(pcCommandQueue, pcActiveCommand);
+
+        //Determine if a VC command moved to the PC queue
+        if ((pcCommandVc < MAX_VC)
+          && COMMAND_PENDING(virtualCircuitList[pcCommandVc].commandQueue,
+                             activeCommand))
+        {
+          //Done with the VC command
+          COMMAND_COMPLETE(virtualCircuitList[pcCommandVc].commandQueue,
+                           virtualCircuitList[pcCommandVc].activeCommand);
+        }
+      }
+      else if (virtualCircuitList[srcVc].activeCommand < CMD_LIST_SIZE)
+      {
+        //This was a VC command
+        COMMAND_COMPLETE(virtualCircuitList[srcVc].commandQueue,
+                         virtualCircuitList[srcVc].activeCommand);
       }
     }
-    else if (virtualCircuitList[srcVc].activeCommand < CMD_LIST_SIZE)
+    else
     {
+      //Finish the programming
+      if (virtualCircuitList[srcVc].activeCommand == CMD_ATI12)
+        virtualCircuitList[srcVc].programUpdated = virtualCircuitList[srcVc].programmed;
+
       //This was a VC command
       COMMAND_COMPLETE(virtualCircuitList[srcVc].commandQueue,
                        virtualCircuitList[srcVc].activeCommand);
     }
-  }
-  else
-  {
-    //Finish the programming
-    if (virtualCircuitList[srcVc].activeCommand == CMD_ATI12)
-      virtualCircuitList[srcVc].programUpdated = virtualCircuitList[srcVc].programmed;
 
-    //This was a VC command
-    COMMAND_COMPLETE(virtualCircuitList[srcVc].commandQueue,
-                     virtualCircuitList[srcVc].activeCommand);
+    vcMsg = (VC_COMMAND_COMPLETE_MESSAGE *)data;
+    if (DISPLAY_COMMAND_COMPLETE)
+      printf("Command complete from VC %d: %s\n", srcVc,
+             (vcMsg->cmdStatus == VC_CMD_SUCCESS) ? "OK" : "ERROR");
+    commandStatus = vcMsg->cmdStatus;
+    waitingForCommandComplete = false;
   }
-
-  vcMsg = (VC_COMMAND_COMPLETE_MESSAGE *)data;
-  if (DISPLAY_COMMAND_COMPLETE)
-    printf("Command complete from VC %d: %s\n", srcVc,
-           (vcMsg->cmdStatus == VC_CMD_SUCCESS) ? "OK" : "ERROR");
-  commandStatus = vcMsg->cmdStatus;
-  waitingForCommandComplete = false;
 }
 
 int commandResponse(uint8_t * data, uint8_t length)
