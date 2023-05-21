@@ -80,7 +80,7 @@
 #define START_TIME_ENTRIES    (MAX_VC * DAYS_IN_WEEK)
 #define DURATION_ENTRIES      (START_TIME_ENTRIES * ZONE_NUMBER_MAX)
 
-#define QUEUE_T                   uint32_t
+#define QUEUE_T                   uint64_t
 #define QUEUE_T_BITS              ((int)(sizeof(QUEUE_T) * 8))
 #define QUEUE_T_MASK              (QUEUE_T_BITS - 1)
 #define COMMAND_QUEUE_SIZE        ((CMD_LIST_SIZE + QUEUE_T_MASK) / QUEUE_T_BITS)
@@ -94,24 +94,24 @@
 #define MILLIS_IN_HOUR            (60 * MILLIS_IN_MINUTE)
 #define MILLIS_IN_DAY             (24 * MILLIS_IN_HOUR)
 
-#define COMMAND_COMPLETE(queue, active)                               \
-{                                                                     \
-  if (COMMAND_PENDING(queue, active))                                 \
-  {                                                                   \
-    if (DEBUG_CMD_ISSUE)                                              \
-    {                                                                 \
-      if (queue == pcCommandQueue)                                    \
-        printf("PC %s done\n", commandName[active]);                  \
-      else                                                            \
-      {                                                               \
-        int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
-               * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);     \
-        printf("VC %d %s done\n", vc, commandName[active]);           \
-      }                                                               \
-    }                                                                 \
-    queue[active / QUEUE_T_BITS] &= ~(1 << (active & QUEUE_T_MASK));  \
-    active = CMD_LIST_SIZE;                                           \
-  }                                                                   \
+#define COMMAND_COMPLETE(queue, active)                                 \
+{                                                                       \
+  if (COMMAND_PENDING(queue, active))                                   \
+  {                                                                     \
+    if (DEBUG_CMD_ISSUE)                                                \
+    {                                                                   \
+      if (queue == pcCommandQueue)                                      \
+        printf("PC %s done\n", commandName[active]);                    \
+      else                                                              \
+      {                                                                 \
+        int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0])   \
+               * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);       \
+        printf("VC %d %s done\n", vc, commandName[active]);             \
+      }                                                                 \
+    }                                                                   \
+    queue[active / QUEUE_T_BITS] &= ~(1ull << (active & QUEUE_T_MASK)); \
+    active = CMD_LIST_SIZE;                                             \
+  }                                                                     \
 }
 
 #define COMMAND_ISSUE(queue, pollCount, cmd)                          \
@@ -132,7 +132,7 @@
   }                                                                   \
                                                                       \
   /* Place the command in the queue */                                \
-  queue[cmd / QUEUE_T_BITS] |= 1 << (cmd & QUEUE_T_MASK);             \
+  queue[cmd / QUEUE_T_BITS] |= 1ull << (cmd & QUEUE_T_MASK);          \
                                                                       \
   /* Timeout the command processor */                                 \
   if (!commandProcessorRunning)                                       \
