@@ -971,19 +971,16 @@ bool commandAT(const char * commandString)
           for (int index = 0; index < sizeof(WATER_USE); index++)
             systemWrite(*data++);
         }
-        else
+        systemPrint("Total Gallons: ");
+        systemPrintln(gallons.total);
+        systemPrint("Leaked Gallons: ");
+        systemPrintln(gallons.leaked);
+        for (int zone = 0; zone < ZONE_NUMBER_MAX; zone++)
         {
-          systemPrint("Total Gallons: ");
-          systemPrintln(gallons.total);
-          systemPrint("Leaked Gallons: ");
-          systemPrintln(gallons.leaked);
-          for (int zone = 0; zone < ZONE_NUMBER_MAX; zone++)
-          {
-            systemPrint("Zone ");
-            systemPrint(zone + 1);
-            systemPrint(" Gallons: ");
-            systemPrintln(gallons.zone[zone]);
-          }
+          systemPrint("Zone ");
+          systemPrint(zone + 1);
+          systemPrint(" Gallons: ");
+          systemPrintln(gallons.zone[zone]);
         }
         return true;
 
