@@ -1,0 +1,28 @@
+######################################################################
+# Copyright 2022 Lee Leahy (lpleahyjr@gmail.com)
+# All rights reserved
+#
+# SprinklerServer.service
+#
+# Start the sprinkler server and weather station monitor service.
+#
+# The "After" starts this service after the network is up and running.
+# See https://www.freedesktop.org/software/systemd/man/systemd.special.html
+# for other targets.
+#
+# The targets during boot can be seen by:
+#
+#      sudo systemctl list-units --type target
+#
+######################################################################
+
+[Unit]
+Description=Sprinkler Server and Weather Station Monitor Service
+After=default.target
+
+[Service]
+Type=Simple
+ExecStart=/home/lee/SparkFun/LoRaSerial/Firmware/Tools/SprinklerServer.sh
+
+[Install]
+WantedBy=default.target

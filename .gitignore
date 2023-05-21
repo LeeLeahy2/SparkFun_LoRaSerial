@@ -55,5 +55,7 @@ Icon
 *.a
 
 # Executables
+Firmware/Tools/Pipe_1
 Firmware/Tools/Slow_Read
+Firmware/Tools/SprinklerServer
 Firmware/Tools/VcServerTest

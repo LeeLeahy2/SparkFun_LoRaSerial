@@ -45,8 +45,8 @@ const int FIRMWARE_VERSION_MINOR = 0;
 #define RADIOLIB_LOW_LEVEL  //Enable access to the module functions
 //#define ENABLE_DEVELOPER true //Uncomment this line to enable special developer modes
 
-#define DEFAULT_AIR_SPEED       4800
-#define DEFAULT_OPERATING_MODE  MODE_POINT_TO_POINT
+#define DEFAULT_AIR_SPEED       19200
+#define DEFAULT_OPERATING_MODE  MODE_VIRTUAL_CIRCUIT
 
 #define UNUSED(x) (void)(x)
 
@@ -101,8 +101,6 @@ uint8_t pin_txen = PIN_UNDEFINED;
 uint8_t pin_rxen = PIN_UNDEFINED;
 uint8_t pin_dio0 = PIN_UNDEFINED;
 uint8_t pin_dio1 = PIN_UNDEFINED;
-uint8_t pin_rts = PIN_UNDEFINED;
-uint8_t pin_cts = PIN_UNDEFINED;
 uint8_t pin_blue_LED = PIN_UNDEFINED;
 uint8_t pin_yellow_LED = PIN_UNDEFINED;
 uint8_t pin_trainButton = PIN_UNDEFINED;
@@ -215,6 +213,8 @@ uint8_t radioTxBuffer[1024 * 3];
 uint16_t txHead = 0;
 uint16_t txTail = 0;
 uint8_t serialTransmitBuffer[1024 * 4]; //Bytes received from RF waiting to be printed out UART. Buffer up to 1s of bytes at 4k
+
+char tempBuffer[256];
 
 unsigned long lastByteReceived_ms = 0; //Track when last transmission was. Send partial buffer once time has expired.
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -613,6 +613,24 @@ unsigned long remoteSystemMillis; //Millis value contained in the received messa
 
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
+//Global variables - Weather Station
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+uint32_t rainCountTotal; //Number of times the rain sensor dumped 0.2794mm (0.010984252in) of water
+uint32_t windCountTotal; //Number of times the wind switch closed, one closure/sec = 2.4km/h (1.49129 mi/h)
+
+uint8_t rainCount[60]; //Each entry is a minute
+uint8_t rainIndex;
+float aveRainFall;
+float maxRainFall;
+float minRainFall;
+
+uint8_t windCount[60]; //Each entry is a second
+uint8_t windIndex;
+float aveWindSpeed;
+float maxWindSpeed;
+float minWindSpeed;
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
 //Architecture variables
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 void updateRTS(bool assertRTS);
@@ -666,6 +684,10 @@ void setup()
 
   updateRTS(true); //We're ready for more data
 
+  //Enable the weather station sensors
+  rainSensorBegin();
+  windSensorBegin();
+
   systemPrintTimestamp();
   systemPrintln("LRS");
   outputSerialData(true);
@@ -695,4 +717,6 @@ void loop()
   updateLeds(); //Update the LEDs on the board
 
   updateHopISR(); //Clear hop ISR as needed
+
+  weatherStationUpdate(); //Get updates from the rain and wind sensors
 }
