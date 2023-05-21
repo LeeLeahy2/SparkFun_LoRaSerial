@@ -5,9 +5,14 @@
 // Constants
 //------------------------------------------------------------------------------
 
-//Increasing above 4 requires adding support for second quad relay board
-//Increasing above 8 requires more relay boards an changing ZONE_MASK type
-#define ZONE_NUMBER_MAX     4   //0 = No zone (off), 1 - 8 = Zone number
+//Increasing above 2 requires more relay boards and changing ZONE_MASK type
+#define MAX_RELAY_BOARDS    2   //Number of relay boards
+#define RELAYS_ON_BOARD     4   //Number of relays on the board
+
+#define ZONE_NUMBER_MAX     (MAX_RELAY_BOARDS * RELAYS_ON_BOARD) //0 = No zone (off), 1 - 8 = Zone number
+
+#define ZONE_TO_RELAY(zone) (((zone - 1) % RELAYS_ON_BOARD) + 1)
+#define ZONE_TO_BOARD(zone) ((zone - 1) / RELAYS_ON_BOARD)
 
 #define PC_WATER_USE    THIRD_PARTY_RESP  //Read the water use
 
