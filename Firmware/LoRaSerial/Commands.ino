@@ -1032,7 +1032,7 @@ bool commandAT(const char * commandString)
         systemPrintln(online.display ? "In Use" : "Not installed");
         systemPrint("    EEPROM: ");
         systemPrintln(online.eeprom ? "Available" : "Failed to initialize");
-        systemPrint("    Flow Meter");
+        systemPrint("    Flow Meter ");
         systemPrintln(online.flowMeter ? "Available" : "No flow detected");
         systemPrint("    H-Bridge: ");
         if (online.hBridge)
