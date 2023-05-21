@@ -353,7 +353,7 @@ void flowSwitchDebounce()
   if ((millis() - flowSensorLastInterruptTime) >= FLOW_TIMEOUT)
   {
     //Determine the new state of the flow control switch
-    if ((!flowDetected) && inputValue)
+    if ((!flowDetected) && inputValue && flowSensorLastInterruptTime)
     {
       //Account for this gallon of flow
       gallons.total++;
