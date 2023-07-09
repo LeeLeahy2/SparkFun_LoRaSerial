@@ -13,12 +13,22 @@
 #include "Sprinkler_Server_Notification.h"
 #include "WeatherStation.h"
 
-#define LOG_ALL                 1
-#define LOG_CMD_COMPLETE        LOG_ALL
-#define LOG_CMD_ISSUE           LOG_ALL
+#define LOG_ALL                 0
+#define LOG_CMD_COMPLETE        1 //LOG_ALL
+#define LOG_CMD_ISSUE           1 //LOG_ALL
+#define LOG_DATA_ACK            LOG_ALL
+#define LOG_DATA_NACK           LOG_ALL
 #define LOG_FILE_PATH           "/var/www/html/MH2/vc-logs"
 #define LOG_HOST_TO_RADIO       LOG_ALL
+#define LOG_LINK_STATUS         1 //LOG_ALL
 #define LOG_RADIO_TO_HOST       LOG_ALL
+#define LOG_RESPONSE_TYPE       LOG_ALL
+#define LOG_RUNTIME             LOG_ALL
+#define LOG_SCHEDULE_ISSUE      1 //LOG_ALL
+#define LOG_SPRINKLER_CHANGES   1 //LOG_ALL
+#define LOG_VC_ID               1 //LOG_ALL
+#define LOG_VC_STATE            1 //LOG_ALL
+#define LOG_WATER_USE           1 //LOG_ALL
 #define VC_PC                   VC_SERVER
 
 #define ISSUE_COMMANDS_IN_PARALLEL      1
@@ -77,6 +87,7 @@
 #define DISPLAY_RUNTIME           0
 #define DISPLAY_STATE_TRANSITION  0
 #define DISPLAY_UNKNOWN_COMMANDS  0
+#define DISPLAY_VC_ID             0
 #define DISPLAY_VC_STATE          0
 #define DISPLAY_WATER_USE         1
 #define DUMP_RADIO_TO_PC          0
@@ -109,24 +120,30 @@
     if (DEBUG_CMD_ISSUE)                                                \
     {                                                                   \
       if (queue == pcCommandQueue)                                      \
-      {                                                                 \
         printf("PC %s done\n", commandName[active]);                    \
-        if (LOG_CMD_COMPLETE)                                           \
-        {                                                               \
-          sprintf(logBuffer, "PC %s done\n", commandName[active]);      \
-          logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));     \
-        }                                                               \
-      }                                                                 \
       else                                                              \
       {                                                                 \
         int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0])   \
                * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);       \
         printf("VC %d %s done\n", vc, commandName[active]);             \
-        if (LOG_CMD_COMPLETE)                                           \
-        {                                                               \
-          sprintf(logBuffer, "VC %d %s done\n", vc, commandName[active]); \
-          logTimeStampAndData(vc, logBuffer, strlen(logBuffer));        \
-        }                                                               \
+      }                                                                 \
+    }                                                                   \
+    if (LOG_SCHEDULE_ISSUE)                                             \
+    {                                                                   \
+      if (queue == pcCommandQueue)                                      \
+      {                                                                 \
+        sprintf(logBuffer, "PC %s done\n", commandName[active]);        \
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));       \
+      }                                                                 \
+      else                                                              \
+      {                                                                 \
+        int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0])   \
+               * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);       \
+        int logFileIndex = logFileValidateVcIndex(vc);                  \
+        sprintf(logBuffer, "VC %d %s done\n", vc, commandName[active]); \
+        logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));\
+        if (logFileIndex != VC_PC)                                      \
+          logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));     \
       }                                                                 \
     }                                                                   \
     queue[active / QUEUE_T_BITS] &= ~(1ull << (active & QUEUE_T_MASK)); \
@@ -134,31 +151,37 @@
   }                                                                     \
 }
 
-#define COMMAND_ISSUE(queue, pollCount, cmd)                          \
+#define COMMAND_SCHEDULE(queue, pollCount, cmd)                       \
 {                                                                     \
   if (DEBUG_CMD_ISSUE)                                                \
   {                                                                   \
     if (!COMMAND_PENDING(queue, cmd))                                 \
     {                                                                 \
       if (queue == pcCommandQueue)                                    \
+        printf("PC %s scheduled\n", commandName[cmd]);                \
+      else                                                            \
       {                                                               \
-        printf("PC %s issued\n", commandName[cmd]);                   \
-        if (LOG_CMD_ISSUE)                                            \
-        {                                                             \
-          sprintf(logBuffer, "PC %s issued\n", commandName[cmd]);     \
-          logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));   \
-        }                                                             \
+        int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
+               * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);     \
+        printf("VC %d %s scheduled\n", vc, commandName[cmd]);         \
+      }                                                               \
+    }                                                                 \
+  }                                                                   \
+  if (LOG_SCHEDULE_ISSUE)                                             \
+  {                                                                   \
+    if (!COMMAND_PENDING(queue, cmd))                                 \
+    {                                                                 \
+      if (queue == pcCommandQueue)                                    \
+      {                                                               \
+        sprintf(logBuffer, "PC %s scheduled\n", commandName[cmd]);    \
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));     \
       }                                                               \
       else                                                            \
       {                                                               \
         int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
                * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);     \
-        printf("VC %d %s issued\n", vc, commandName[cmd]);            \
-        if (LOG_CMD_ISSUE)                                            \
-        {                                                             \
-          sprintf(logBuffer, "VC %d %s issued\n", vc, commandName[cmd]); \
-          logTimeStampAndData(vc, logBuffer, strlen(logBuffer));      \
-        }                                                             \
+        sprintf(logBuffer, "VC %d %s scheduled\n", vc, commandName[cmd]);\
+        logTimeStampAndData(vc, logBuffer, strlen(logBuffer));        \
       }                                                               \
     }                                                                 \
   }                                                                   \
@@ -441,7 +464,7 @@ int logTimeStamp(int vcIndex)
     // Get the current time
     time(&t);
     tm = localtime(&t);
-    sprintf(timeBuffer, "%04d%02d%02d%02d%02d%02d: ", tm->tm_year + 1900, tm->tm_mon + 1,
+    sprintf(timeBuffer, "%04d-%02d-%02d %2d:%02d:%02d: ", tm->tm_year + 1900, tm->tm_mon + 1,
             tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
     return logWrite(vcIndex, timeBuffer, strlen(timeBuffer));
 }
@@ -486,7 +509,7 @@ int logFileValidateVcIndex(int vcIndex)
             error = 0;
 
             // Determine if the local PC is being addressed
-            if (channel != 7)
+            if ((channel != 7) && (channel != 5))
 
                 // A local or remote radio is being addressed, extract the VC index
                 logFileIndex = vcIndex & VCAB_NUMBER_MASK;
@@ -1094,6 +1117,7 @@ int hostToRadio(uint8_t destVc, uint8_t * buffer, int length)
       logDumpBuffer(logFileIndex, buffer, length);
     }
     logDumpBuffer(VC_PC, buffer, length);
+    fdatasync(logFile[VC_PC]);
   }
 
   //Send the header
@@ -1307,10 +1331,18 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   virtualCircuitList[srcVc].vcState = newState;
 
   //Display the state if requested
-  if (DISPLAY_STATE_TRANSITION || (newState == VC_STATE_LINK_DOWN)
-    || (previousState == VC_STATE_LINK_DOWN)
+  if (DISPLAY_STATE_TRANSITION || LOG_LINK_STATUS
+    || (newState == VC_STATE_LINK_DOWN) || (previousState == VC_STATE_LINK_DOWN)
     || ((newState != previousState) && (virtualCircuitList[srcVc].activeCommand < CMD_LIST_SIZE)))
-    printf("VC%d: %s --> %s\n", srcVc, vcStateNames[previousState], vcStateNames[newState]);
+  {
+    if (DISPLAY_STATE_TRANSITION)
+      printf("VC%d: %s --> %s\n", srcVc, vcStateNames[previousState], vcStateNames[newState]);
+    if (LOG_LINK_STATUS)
+    {
+      sprintf(logBuffer, "VC%d: %s --> %s\n", srcVc, vcStateNames[previousState], vcStateNames[newState]);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
+  }
 
   //Save the LoRaSerial radio's unique ID
   //Determine if the PC's value is valid
@@ -1325,12 +1357,23 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
       virtualCircuitList[srcVc].valid = true;
 
       //Display this ID value
-      printf("VC %d unique ID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
-             srcVc,
-             vcMsg->uniqueId[0], vcMsg->uniqueId[1], vcMsg->uniqueId[2], vcMsg->uniqueId[3],
-             vcMsg->uniqueId[4], vcMsg->uniqueId[5], vcMsg->uniqueId[6], vcMsg->uniqueId[7],
-             vcMsg->uniqueId[8], vcMsg->uniqueId[9], vcMsg->uniqueId[10], vcMsg->uniqueId[11],
-             vcMsg->uniqueId[12], vcMsg->uniqueId[13], vcMsg->uniqueId[14], vcMsg->uniqueId[15]);
+      if (DISPLAY_VC_ID)
+        printf("VC %d unique ID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+               srcVc,
+               vcMsg->uniqueId[0], vcMsg->uniqueId[1], vcMsg->uniqueId[2], vcMsg->uniqueId[3],
+               vcMsg->uniqueId[4], vcMsg->uniqueId[5], vcMsg->uniqueId[6], vcMsg->uniqueId[7],
+               vcMsg->uniqueId[8], vcMsg->uniqueId[9], vcMsg->uniqueId[10], vcMsg->uniqueId[11],
+               vcMsg->uniqueId[12], vcMsg->uniqueId[13], vcMsg->uniqueId[14], vcMsg->uniqueId[15]);
+      if (LOG_VC_ID)
+      {
+        sprintf(logBuffer, "VC %d unique ID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+               srcVc,
+               vcMsg->uniqueId[0], vcMsg->uniqueId[1], vcMsg->uniqueId[2], vcMsg->uniqueId[3],
+               vcMsg->uniqueId[4], vcMsg->uniqueId[5], vcMsg->uniqueId[6], vcMsg->uniqueId[7],
+               vcMsg->uniqueId[8], vcMsg->uniqueId[9], vcMsg->uniqueId[10], vcMsg->uniqueId[11],
+               vcMsg->uniqueId[12], vcMsg->uniqueId[13], vcMsg->uniqueId[14], vcMsg->uniqueId[15]);
+        logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+      }
 
       //Update the database
       databaseUpdateVc(mysql, srcVc, vcMsg->uniqueId, 1);
@@ -1347,12 +1390,23 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
       virtualCircuitList[srcVc].valid = true;
 
       //Display this ID value
-      printf("VC %d unique ID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
-             srcVc,
-             vcMsg->uniqueId[0], vcMsg->uniqueId[1], vcMsg->uniqueId[2], vcMsg->uniqueId[3],
-             vcMsg->uniqueId[4], vcMsg->uniqueId[5], vcMsg->uniqueId[6], vcMsg->uniqueId[7],
-             vcMsg->uniqueId[8], vcMsg->uniqueId[9], vcMsg->uniqueId[10], vcMsg->uniqueId[11],
-             vcMsg->uniqueId[12], vcMsg->uniqueId[13], vcMsg->uniqueId[14], vcMsg->uniqueId[15]);
+      if (DISPLAY_VC_ID)
+        printf("VC %d unique ID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+               srcVc,
+               vcMsg->uniqueId[0], vcMsg->uniqueId[1], vcMsg->uniqueId[2], vcMsg->uniqueId[3],
+               vcMsg->uniqueId[4], vcMsg->uniqueId[5], vcMsg->uniqueId[6], vcMsg->uniqueId[7],
+               vcMsg->uniqueId[8], vcMsg->uniqueId[9], vcMsg->uniqueId[10], vcMsg->uniqueId[11],
+               vcMsg->uniqueId[12], vcMsg->uniqueId[13], vcMsg->uniqueId[14], vcMsg->uniqueId[15]);
+      if (LOG_VC_ID)
+      {
+        sprintf(logBuffer, "VC %d unique ID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+               srcVc,
+               vcMsg->uniqueId[0], vcMsg->uniqueId[1], vcMsg->uniqueId[2], vcMsg->uniqueId[3],
+               vcMsg->uniqueId[4], vcMsg->uniqueId[5], vcMsg->uniqueId[6], vcMsg->uniqueId[7],
+               vcMsg->uniqueId[8], vcMsg->uniqueId[9], vcMsg->uniqueId[10], vcMsg->uniqueId[11],
+               vcMsg->uniqueId[12], vcMsg->uniqueId[13], vcMsg->uniqueId[14], vcMsg->uniqueId[15]);
+        logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+      }
 
       //Update the database
       databaseUpdateVc(mysql, srcVc, vcMsg->uniqueId, 1);
@@ -1364,8 +1418,18 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   default:
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d unknown state!\n", srcVc);
+    if (LOG_SCHEDULE_ISSUE)
+    {
+      sprintf(logBuffer, "VC %d unknown state!\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     if (DISPLAY_VC_STATE)
       printf("------- VC %d State %3d ------\n", srcVc, vcMsg->vcState);
+    if (LOG_VC_STATE)
+    {
+      sprintf(logBuffer, "------- VC %d State %3d ------\n", srcVc, vcMsg->vcState);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     break;
 
   case VC_STATE_LINK_DOWN:
@@ -1374,8 +1438,18 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     virtualCircuitList[srcVc].commandTimer = 0;
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d DOWN\n", srcVc);
+    if (LOG_SCHEDULE_ISSUE)
+    {
+      sprintf(logBuffer, "VC %d DOWN\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     if (DISPLAY_VC_STATE)
       printf("--------- VC %d DOWN ---------\n", srcVc);
+    if (LOG_VC_STATE)
+    {
+      sprintf(logBuffer, "--------- VC %d DOWN ---------\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     break;
 
   case VC_STATE_LINK_ALIVE:
@@ -1385,33 +1459,63 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     {
       if (DEBUG_PC_CMD_ISSUE)
         printf("VC %d ALIVE\n", srcVc);
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_WAIT_CONNECTED);
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_ATC);
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_AT_CMDVC);
+      if (LOG_SCHEDULE_ISSUE)
+      {
+        sprintf(logBuffer, "VC %d ALIVE\n", srcVc);
+        logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+      }
+      COMMAND_SCHEDULE(virtualCircuitList[srcVc].commandQueue,
+                       virtualCircuitList[srcVc].commandTimer,
+                       CMD_WAIT_CONNECTED);
+      COMMAND_SCHEDULE(virtualCircuitList[srcVc].commandQueue,
+                       virtualCircuitList[srcVc].commandTimer,
+                       CMD_ATC);
+      COMMAND_SCHEDULE(virtualCircuitList[srcVc].commandQueue,
+                       virtualCircuitList[srcVc].commandTimer,
+                       CMD_AT_CMDVC);
     }
 
     if (DISPLAY_VC_STATE)
       printf("-=--=--=- VC %d ALIVE =--=--=-\n", srcVc);
+    if (LOG_VC_STATE)
+    {
+      sprintf(logBuffer, "-=--=--=- VC %d ALIVE =--=--=-\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     break;
 
   case VC_STATE_SEND_UNKNOWN_ACKS:
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d SEND_UNKNOWN_ACKS\n", srcVc);
+    if (LOG_SCHEDULE_ISSUE)
+    {
+      sprintf(logBuffer, "VC %d SEND_UNKNOWN_ACKS\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     if (DISPLAY_VC_STATE)
       printf("-=--=-- VC %d ALIVE UA --=--=-\n", srcVc);
+    if (LOG_VC_STATE)
+    {
+      sprintf(logBuffer, "-=--=-- VC %d ALIVE UA --=--=-\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     break;
 
   case VC_STATE_WAIT_SYNC_ACKS:
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d WAIT_SYNC_ACKS\n", srcVc);
+    if (LOG_SCHEDULE_ISSUE)
+    {
+      sprintf(logBuffer, "VC %d WAIT_SYNC_ACKS\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     if (DISPLAY_VC_STATE)
       printf("-=--=-- VC %d ALIVE SA --=--=-\n", srcVc);
+    if (LOG_VC_STATE)
+    {
+      sprintf(logBuffer, "-=--=-- VC %d ALIVE SA --=--=-\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     break;
 
   case VC_STATE_WAIT_ZERO_ACKS:
@@ -1423,6 +1527,16 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
         printf("-=-=- VC %d DISCONNECTED -=-=-", srcVc);
       printf("-=--=-- VC %d ALIVE ZA --=--=-\n", srcVc);
     }
+    if (LOG_VC_STATE)
+    {
+      if (previousState == VC_STATE_CONNECTED)
+      {
+        sprintf(logBuffer, "-=-=- VC %d DISCONNECTED -=-=-", srcVc);
+        logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+      }
+      sprintf(logBuffer, "-=--=-- VC %d ALIVE ZA --=--=-\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     break;
 
   case VC_STATE_CONNECTED:
@@ -1430,12 +1544,17 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
       && (!COMMAND_PENDING(virtualCircuitList[srcVc].commandQueue, CMD_WAIT_CONNECTED)))
     {
       //Issue the necessary commands when the link is connected
-      COMMAND_ISSUE(virtualCircuitList[srcVc].commandQueue,
-                    virtualCircuitList[srcVc].commandTimer,
-                    CMD_WAIT_CONNECTED);
+      COMMAND_SCHEDULE(virtualCircuitList[srcVc].commandQueue,
+                       virtualCircuitList[srcVc].commandTimer,
+                       CMD_WAIT_CONNECTED);
     }
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d CONNECTED\n", srcVc);
+    if (LOG_SCHEDULE_ISSUE)
+    {
+      sprintf(logBuffer, "VC %d CONNECTED\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     if ((pcActiveCommand == CMD_ATC) && COMMAND_PENDING(pcCommandQueue, CMD_ATC))
     {
       if (srcVc == pcCommandVc)
@@ -1445,6 +1564,11 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     }
     if (DISPLAY_VC_STATE)
       printf("======= VC %d CONNECTED ======\n", srcVc);
+    if (LOG_VC_STATE)
+    {
+      sprintf(logBuffer, "======= VC %d CONNECTED ======\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    }
     break;
   }
 
@@ -1464,6 +1588,11 @@ void radioDataAck(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t len
   vcMsg = (VC_DATA_ACK_NACK_MESSAGE *)data;
   if (DISPLAY_DATA_ACK)
     printf("ACK from VC %d\n", vcMsg->msgDestVc);
+  if (LOG_DATA_ACK)
+  {
+    sprintf(logBuffer, "ACK from VC %d\n", vcMsg->msgDestVc);
+    logTimeStampAndData(vcMsg->msgDestVc, logBuffer, strlen(logBuffer));
+  }
 }
 
 void radioDataNack(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t length)
@@ -1476,6 +1605,11 @@ void radioDataNack(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t le
   vcIndex = vcMsg->msgDestVc & VCAB_NUMBER_MASK;
   if (DISPLAY_DATA_NACK)
     printf("NACK from VC %d\n", vcIndex);
+  if (LOG_DATA_NACK)
+  {
+    sprintf(logBuffer, "NACK from VC %d\n", vcIndex);
+    logTimeStampAndData(vcMsg->msgDestVc, logBuffer, strlen(logBuffer));
+  }
 
   //Clear the command queue for this VC
   for (index = 0; index < COMMAND_QUEUE_SIZE; index++)
@@ -1500,6 +1634,12 @@ void radioRuntime(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t len
   if (DISPLAY_RUNTIME)
     printf("VC %d runtime: %lld, programmed: %lld\n",
            vcIndex, (long long)vcMsg->runtime, (long long)vcMsg->programmed);
+  if (LOG_RUNTIME)
+  {
+    sprintf(logBuffer, "VC %d runtime: %lld, programmed: %lld\n",
+           vcIndex, (long long)vcMsg->runtime, (long long)vcMsg->programmed);
+    logTimeStampAndData(header->radio.srcVc, logBuffer, strlen(logBuffer));
+  }
 
   //Set the time values
   memcpy(&virtualCircuitList[vcIndex].runtime, &vcMsg->runtime, sizeof(vcMsg->runtime));
@@ -1570,6 +1710,21 @@ void updateWaterUse(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t l
     for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
       printf("    Zone  %d Gallons: %d\n", zone + 1, virtualCircuitList[vcIndex].gallons.zone[zone]);
   }
+  if (LOG_WATER_USE)
+  {
+    int logFileIndex = logFileValidateVcIndex(header->radio.srcVc);
+    sprintf(logBuffer, "VC %d Water Use:\n", vcIndex);
+    logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+    sprintf(logBuffer, "    Total Gallons: %d\n", virtualCircuitList[vcIndex].gallons.total);
+    logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+    sprintf(logBuffer, "    Leaked Gallons: %d\n", virtualCircuitList[vcIndex].gallons.leaked);
+    logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+    for (zone = 0; zone < ZONE_NUMBER_MAX; zone++)
+    {
+      sprintf(logBuffer, "    Zone  %d Gallons: %d\n", zone + 1, virtualCircuitList[vcIndex].gallons.zone[zone]);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+    }
+  }
 }
 
 void radioCommandComplete(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t length)
@@ -1592,6 +1747,8 @@ void radioCommandComplete(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uin
       {
       default:
         fprintf(stderr, "ERROR: Unknown VC: %d (0x%02x)\n", srcVc, srcVc);
+        sprintf(logBuffer, "ERROR: Unknown VC: %d (0x%02x)\n", srcVc, srcVc);
+        logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
         exit(-2);
         break;
 
@@ -1643,6 +1800,12 @@ void radioCommandComplete(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uin
   if (DISPLAY_COMMAND_COMPLETE)
     printf("Command complete from VC %d: %s\n", srcVc,
            (vcMsg->cmdStatus == VC_CMD_SUCCESS) ? "OK" : "ERROR");
+  if (LOG_CMD_COMPLETE)
+  {
+    sprintf(logBuffer, "Command complete from VC %d: %s\n", srcVc,
+           (vcMsg->cmdStatus == VC_CMD_SUCCESS) ? "OK" : "ERROR");
+    logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+  }
   commandStatus = vcMsg->cmdStatus;
   waitingForCommandComplete = false;
 }
@@ -1702,6 +1865,20 @@ int commandResponse(uint8_t * data, uint8_t length)
       printf("    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
       if (length > 0)
         dumpBuffer(dataStart, length);
+    }
+    if (LOG_RADIO_TO_HOST)
+    {
+      int logFileIndex = logFileValidateVcIndex(header->radio.srcVc);
+      sprintf(logBuffer, "VC Header:\n");
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "    length: %d\n", header->radio.length);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "    destVc: %d (0x%02x)\n", (uint8_t)header->radio.destVc, (uint8_t)header->radio.destVc);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      if (length > 0)
+        logDumpBuffer(logFileIndex, dataStart, length);
     }
 
     //------------------------------
@@ -1767,9 +1944,6 @@ int radioToHost()
     if (DUMP_RADIO_TO_PC)
       if (bytesRead)
         dumpBuffer(dataStart, dataEnd - dataStart);
-    if (LOG_RADIO_TO_HOST)
-      if (bytesRead)
-        logDumpBuffer(VC_PC, dataStart, dataEnd - dataStart);
 
     //The data read is a mix of debug serial output and virtual circuit messages
     //Any data before the VC_SERIAL_MESSAGE_HEADER is considered debug serial output
@@ -1780,8 +1954,17 @@ int radioToHost()
     //Process any debug data
     length = data - dataStart;
     if (length)
+    {
+      if (LOG_RADIO_TO_HOST)
+        if (bytesRead)
+        {
+          logDumpBuffer(VC_PC, dataStart, length);
+          fdatasync(logFile[VC_PC]);
+        }
+
       //Output the debug data
       hostToStdout(NULL, dataStart, length);
+    }
 
     //Determine if this is the beginning of a virtual circuit message
     length = dataEnd - data;
@@ -1825,34 +2008,37 @@ int radioToHost()
       printf("    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
       if (length > 0)
         dumpBuffer(data, length);
-      if (LOG_RADIO_TO_HOST)
-      {
-        logFileIndex = logFileValidateVcIndex((uint8_t)header->radio.destVc);
-        sprintf(logBuffer, "VC Header:\n");
-        logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
-        sprintf(logBuffer, "    length: %d\n", header->radio.length);
-        logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
-        sprintf(logBuffer, "    destVc: %d (0x%02x)\n", (uint8_t)header->radio.destVc, (uint8_t)header->radio.destVc);
-        logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
-        sprintf(logBuffer, "    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
-        logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
-        if (length > 0)
-          logDumpBuffer(logFileIndex, data, length);
+    }
 
-        if (logFileIndex != VC_PC)
-        {
-          logFileIndex = logFileValidateVcIndex((uint8_t)header->radio.destVc);
-          sprintf(logBuffer, "VC Header:\n");
-          logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
-          sprintf(logBuffer, "    length: %d\n", header->radio.length);
-          logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
-          sprintf(logBuffer, "    destVc: %d (0x%02x)\n", (uint8_t)header->radio.destVc, (uint8_t)header->radio.destVc);
-          logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
-          sprintf(logBuffer, "    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
-          logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
-          if (length > 0)
-            logDumpBuffer(logFileIndex, data, length);
-        }
+    // Log the VC messages
+    if (LOG_RADIO_TO_HOST)
+    {
+      logFileIndex = logFileValidateVcIndex((uint8_t)header->radio.destVc);
+      sprintf(logBuffer, "VC Header:\n");
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "    length: %d\n", header->radio.length);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "    destVc: %d (0x%02x)\n", (uint8_t)header->radio.destVc, (uint8_t)header->radio.destVc);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      if (length > 0)
+        logDumpBuffer(logFileIndex, data, length);
+      fdatasync(logFile[logFileIndex]);
+
+      if (logFileIndex != VC_PC)
+      {
+        sprintf(logBuffer, "VC Header:\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+        sprintf(logBuffer, "    length: %d\n", header->radio.length);
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+        sprintf(logBuffer, "    destVc: %d (0x%02x)\n", (uint8_t)header->radio.destVc, (uint8_t)header->radio.destVc);
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+        sprintf(logBuffer, "    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+        if (length > 0)
+          logDumpBuffer(VC_PC, data, length);
+        fdatasync(logFile[VC_PC]);
       }
     }
 
@@ -1862,37 +2048,99 @@ int radioToHost()
 
     //Display link status
     if (header->radio.destVc == PC_LINK_STATUS)
+    {
+      if (LOG_RESPONSE_TYPE)
+      {
+        sprintf(logBuffer, "Response: Link status\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
       radioToPcLinkStatus(header, data, VC_SERIAL_HEADER_BYTES + length);
+    }
 
     else if (header->radio.destVc == PC_RAIN_STATUS)
+    {
+      if (LOG_RESPONSE_TYPE)
+      {
+        sprintf(logBuffer, "Response: Rain status\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
       rainStatus(header, VC_SERIAL_HEADER_BYTES + length);
+    }
 
     else if (header->radio.destVc == PC_WIND_STATUS)
+    {
+      if (LOG_RESPONSE_TYPE)
+      {
+        sprintf(logBuffer, "Response: Wind status\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
       windStatus(header, VC_SERIAL_HEADER_BYTES + length);
+    }
 
     //Display remote command response
     else if (header->radio.destVc == (PC_REMOTE_RESPONSE | myVc))
+    {
+      if (LOG_RESPONSE_TYPE)
+      {
+        sprintf(logBuffer, "Response: Command response\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
       status = commandResponse(data, length);
+    }
 
     //Display command completion status
     else if (header->radio.destVc == PC_COMMAND_COMPLETE)
+    {
+      if (LOG_RESPONSE_TYPE)
+      {
+        sprintf(logBuffer, "Response: Command complete\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
       radioCommandComplete(header, data, length);
+    }
 
     //Display ACKs for transmitted messages
     else if (header->radio.destVc == PC_DATA_ACK)
+    {
+      if (LOG_RESPONSE_TYPE)
+      {
+        sprintf(logBuffer, "Response: ACK\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
       radioDataAck(header, data, length);
+    }
 
     //Display NACKs for transmitted messages
     else if (header->radio.destVc == PC_DATA_NACK)
+    {
+      if (LOG_RESPONSE_TYPE)
+      {
+        sprintf(logBuffer, "Response: NACK\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
       radioDataNack(header, data, length);
+    }
 
     //Display radio runtime
     else if (header->radio.destVc == PC_RUNTIME)
+    {
+      if (LOG_RESPONSE_TYPE)
+      {
+        sprintf(logBuffer, "Response: Runtime\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
       radioRuntime(header, data, length);
+    }
 
     //Display received messages
     else if ((header->radio.destVc == myVc) || (header->radio.destVc == VC_BROADCAST))
     {
+      if (LOG_RESPONSE_TYPE)
+      {
+        sprintf(logBuffer, "Response: Message\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
+
       //Output this message
       status = hostToStdout(header, data, length);
     }
@@ -1956,18 +2204,33 @@ void issuePcCommands()
                   //Get myVc address
                   if (DEBUG_PC_CMD_ISSUE)
                     printf("Issuing ATI30 command\n");
+                  if (LOG_CMD_ISSUE)
+                  {
+                    sprintf(logBuffer, "Issuing ATI30 command\n");
+                    logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                  }
                   findMyVc = true;
                   cmdToRadio((uint8_t *)GET_MY_VC_ADDRESS, strlen(GET_MY_VC_ADDRESS));
                   return;
                 }
                 if (DEBUG_PC_CMD_ISSUE)
                   printf("Skipping ATI30 command, myVC already known\n");
+                if (LOG_CMD_ISSUE)
+                {
+                  sprintf(logBuffer, "Skipping ATI30 command, myVC already known\n");
+                  logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                }
                 COMMAND_COMPLETE(pcCommandQueue, pcActiveCommand);
                 break;
 
               case CMD_ATB: //Break all of the VC links
                 if (DEBUG_PC_CMD_ISSUE)
                   printf("Issuing ATB command\n");
+                if (LOG_CMD_ISSUE)
+                {
+                  sprintf(logBuffer, "Issuing ATB command\n");
+                  logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                }
                 cmdToRadio((uint8_t *)BREAK_LINKS_COMMAND, strlen(BREAK_LINKS_COMMAND));
                 return;
 
@@ -1975,24 +2238,44 @@ void issuePcCommands()
                 //Get the server model name
                 if (DEBUG_PC_CMD_ISSUE)
                   printf("Issuing %s command\n", GET_SERVER_MODEL);
+                if (LOG_CMD_ISSUE)
+                {
+                  sprintf(logBuffer, "Issuing %s command\n", GET_SERVER_MODEL);
+                  logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                }
                 cmdToRadio((uint8_t *)GET_SERVER_MODEL, strlen(GET_SERVER_MODEL));
                 return;
 
               case CMD_ATI:
                 if (DEBUG_PC_CMD_ISSUE)
                   printf("Issuing ATI command\n");
+                if (LOG_CMD_ISSUE)
+                {
+                  sprintf(logBuffer, "Issuing ATI command\n");
+                  logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                }
                 cmdToRadio((uint8_t *)GET_DEVICE_INFO, strlen(GET_DEVICE_INFO));
                 return;
 
               case CMD_ATI8:
                 if (DEBUG_PC_CMD_ISSUE)
                   printf("Issuing ATI8 command\n");
+                if (LOG_CMD_ISSUE)
+                {
+                  sprintf(logBuffer, "Issuing ATI8 command\n");
+                  logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                }
                 cmdToRadio((uint8_t *)GET_UNIQUE_ID, strlen(GET_UNIQUE_ID));
                 return;
 
               case CMD_ATA: //Get all the VC states
                 if (DEBUG_PC_CMD_ISSUE)
                   printf("Issuing ATA command\n");
+                if (LOG_CMD_ISSUE)
+                {
+                  sprintf(logBuffer, "Issuing ATA command\n");
+                  logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                }
                 cmdToRadio((uint8_t *)GET_VC_STATUS, strlen(GET_VC_STATUS));
                 return;
 
@@ -2002,6 +2285,11 @@ void issuePcCommands()
                 sprintf(pcCommandBuffer, "at-CmdVc=%d", pcCommandVc);
                 if (DEBUG_PC_CMD_ISSUE)
                   printf("Issuing %s command\n", pcCommandBuffer);
+                if (LOG_CMD_ISSUE)
+                {
+                  sprintf(logBuffer, "Issuing %s command\n", pcCommandBuffer);
+                  logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                }
                 cmdToRadio((uint8_t *)pcCommandBuffer, strlen(pcCommandBuffer));
                 return;
 
@@ -2009,6 +2297,11 @@ void issuePcCommands()
                 //Bring up the VC connection to this remote system
                 if (DEBUG_PC_CMD_ISSUE)
                   printf("Issuing ATC command\n");
+                if (LOG_CMD_ISSUE)
+                {
+                  sprintf(logBuffer, "Issuing ATC command\n");
+                  logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                }
                 cmdToRadio((uint8_t *)START_3_WAY_HANDSHAKE, strlen(START_3_WAY_HANDSHAKE));
                 return;
 
@@ -2016,6 +2309,11 @@ void issuePcCommands()
                 //Get the VC state
                 if (DEBUG_PC_CMD_ISSUE)
                   printf("Issuing ATI31 command\n");
+                if (LOG_CMD_ISSUE)
+                {
+                  sprintf(logBuffer, "Issuing ATI31 command\n");
+                  logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                }
                 cmdToRadio((uint8_t *)GET_VC_STATE, strlen(GET_VC_STATE));
                 return;
             }
@@ -2027,6 +2325,11 @@ void issuePcCommands()
     //No more PC commands to process
     if (DEBUG_CMD_ISSUE && pcCommandTimer)
       printf("PC command list empty\n");
+    if (LOG_CMD_ISSUE && pcCommandTimer)
+    {
+      sprintf(logBuffer, "PC command list empty\n");
+      logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+    }
     pcActiveCommand = CMD_LIST_SIZE;
     pcCommandTimer = 0;
     pcCommandVc = MAX_VC;
@@ -2057,6 +2360,13 @@ int sendVcCommand(const char * commandString, int destVc)
     printf("Sending LoRaSerial command: %s\n", commandString);
   if (DEBUG_PC_CMD_ISSUE)
     printf("Sending %s command to VC %d\n", commandString, destVc);
+  if (LOG_CMD_ISSUE)
+  {
+    sprintf(logBuffer, "Sending %s command to VC %d\n", commandString, destVc);
+    logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+    sprintf(logBuffer, "Sending %s command to VC %d\n", commandString, destVc);
+    logTimeStampAndData(destVc, logBuffer, strlen(logBuffer));
+  }
 
   //Send the header
   bytesWritten = write(radio, (uint8_t *)&header, VC_SERIAL_HEADER_BYTES);
@@ -2145,9 +2455,19 @@ bool issueVcCommands(int vcIndex)
                 {
                   if (DEBUG_PC_CMD_ISSUE)
                     printf("Migrating AT-CMDVC=%d and ATC commands to PC command queue\n", vcIndex);
+                  if (LOG_SCHEDULE_ISSUE)
+                  {
+                    sprintf(logBuffer, "Migrating AT-CMDVC=%d and ATC commands to PC command queue\n", vcIndex);
+                    logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                    if (vcIndex != VC_PC)
+                    {
+                      sprintf(logBuffer, "Migrating AT-CMDVC=%d and ATC commands to PC command queue\n", vcIndex);
+                      logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+                    }
+                  }
                   if (COMMAND_PENDING(virtualCircuitList[vcIndex].commandQueue, CMD_ATC))
-                    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATC);
-                  COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_AT_CMDVC);
+                    COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_ATC);
+                  COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_AT_CMDVC);
                   return true;
                 }
                 virtualCircuitList[vcIndex].activeCommand = CMD_LIST_SIZE;
@@ -2173,34 +2493,34 @@ bool issueVcCommands(int vcIndex)
                 //Get the sprinkler controller information
                 if (vcIndex != myVc)
                 {
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CHECK_FOR_UPDATE);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_ATI11);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_ATI8_2);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_ATI_2);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_GET_CLIENT_MODEL);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CHECK_FOR_UPDATE);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_ATI11);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_ATI8_2);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_ATI_2);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_GET_CLIENT_MODEL);
                 }
 
                 //Get the VC state
                 if (vcIndex != myVc)
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_ATI31);
-                COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI31);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_ATI31);
+                COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_ATI31);
                 if (vcIndex != myVc)
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_AT_CMDVC_2);
-                COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_AT_CMDVC_2);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_AT_CMDVC_2);
+                COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_AT_CMDVC_2);
                 break;
 
               case CMD_AT_CMDVC_2:
@@ -2236,56 +2556,56 @@ bool issueVcCommands(int vcIndex)
                   || (virtualCircuitList[vcIndex].programUpdated > virtualCircuitList[vcIndex].programmed))
                 {
                   //Complete the programming
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                PROGRAMMING_COMPLETED);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_ATI12);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   PROGRAMMING_COMPLETED);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_ATI12);
 
                   //Make sure the sprinkler controller is enabled
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_AT_ENABLE_CONTROLLER);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_AT_ENABLE_CONTROLLER);
 
                   //Set the duration for all of the zones for each day of the week
                   durationBase = vcIndex * DAYS_IN_WEEK * ZONE_NUMBER_MAX;
                   memset(&setDurations[durationBase], 0xff, DAYS_IN_WEEK * ZONE_NUMBER_MAX);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_DAY_OF_WEEK_2);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_DAY_OF_WEEK_2);
 
                   //Set the start times for each day of the week
                   setStartTimes[vcIndex] = (1 << DAYS_IN_WEEK) - 1;
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_DAY_OF_WEEK);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_DAY_OF_WEEK);
 
                   //Configure the sprinkler controller to properly drive the zone solenoids
                   configureSolenoids[vcIndex] = ZONE_MASK;
                   manualZones[vcIndex] = ZONE_MASK;
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SELECT_ZONE);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SELECT_ZONE);
 
                   //Get the previous water use
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_GET_WATER_USE);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_GET_WATER_USE);
 
                   //Set the time of day
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_ATI89);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_AT_TIME_OF_DAY);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_AT_DAY_OF_WEEK);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_AT_DISABLE_CONTROLLER);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_ATI89);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_AT_TIME_OF_DAY);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_AT_DAY_OF_WEEK);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_AT_DISABLE_CONTROLLER);
                 }
                 return true;
 
@@ -2337,18 +2657,18 @@ bool issueVcCommands(int vcIndex)
                     sendVcCommand(vcCommandBuffer[vcIndex], vcIndex);
 
                     //Complete the sequence for this zone
-                    COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                  virtualCircuitList[vcIndex].commandTimer,
-                                  COMPLETE_ZONE_CONFIGURATION);
+                    COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                     virtualCircuitList[vcIndex].commandTimer,
+                                     COMPLETE_ZONE_CONFIGURATION);
 
                     //Issue the command to manually control the zone
                     if (manualZones[vcIndex] & zoneBit)
                     {
                       manualZones[vcIndex] &= ~zoneBit;
                       manualControl[vcIndex] = (manualOn[vcIndex] >> zoneIndex) & 1;
-                      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                    virtualCircuitList[vcIndex].commandTimer,
-                                    CMD_SET_MANUAL_ON);
+                      COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                       virtualCircuitList[vcIndex].commandTimer,
+                                       CMD_SET_MANUAL_ON);
                     }
 
                     //Issue the command to select the solenoid type
@@ -2356,9 +2676,9 @@ bool issueVcCommands(int vcIndex)
                     {
                       configureSolenoids[vcIndex] &= ~zoneBit;
                       solenoidType[vcIndex] = (latchingSolenoid[vcIndex] >> zoneIndex) & 1;
-                      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                    virtualCircuitList[vcIndex].commandTimer,
-                                    CMD_SELECT_SOLENOID);
+                      COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                       virtualCircuitList[vcIndex].commandTimer,
+                                       CMD_SELECT_SOLENOID);
                     }
                     return true;
                   }
@@ -2393,9 +2713,9 @@ bool issueVcCommands(int vcIndex)
                 if (configureSolenoids[vcIndex] | manualZones[vcIndex])
                 {
                   //Configure the next zone
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SELECT_ZONE);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SELECT_ZONE);
                   return true;
                 }
                 break;
@@ -2417,12 +2737,12 @@ bool issueVcCommands(int vcIndex)
 
                   //Issue the command to set the start time
                   dayNumber[vcIndex] = dayIndex;
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ALL_START_TIMES);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_START_TIME);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_ALL_START_TIMES);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_START_TIME);
                   return true;
                 }
                 COMMAND_COMPLETE(virtualCircuitList[vcIndex].commandQueue,
@@ -2443,9 +2763,9 @@ bool issueVcCommands(int vcIndex)
                 if (setStartTimes[vcIndex])
                 {
                   //Configure the next zone
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_DAY_OF_WEEK);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_DAY_OF_WEEK);
                   return true;
                 }
                 break;
@@ -2472,9 +2792,9 @@ bool issueVcCommands(int vcIndex)
 
                   //Issue the command to set the start time
                   dayNumber[vcIndex] = dayIndex;
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SELECT_ZONE_2);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SELECT_ZONE_2);
                   return true;
                 }
                 dayNumber[vcIndex] = dayIndex;
@@ -2501,12 +2821,12 @@ bool issueVcCommands(int vcIndex)
 
                   //Save the zone number
                   zoneNumber[vcIndex] = zoneIndex + 1;
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ALL_DURATIONS);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ZONE_DURATION);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_ALL_DURATIONS);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_ZONE_DURATION);
                   return true;
                 }
                 COMMAND_COMPLETE(virtualCircuitList[vcIndex].commandQueue,
@@ -2531,23 +2851,23 @@ bool issueVcCommands(int vcIndex)
                 if (zoneNumber[vcIndex] < ZONE_NUMBER_MAX)
                 {
                   //Set the duration for the next zone
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ALL_DURATIONS);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SELECT_ZONE_2);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_ALL_DURATIONS);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SELECT_ZONE_2);
                   return true;
                 }
                 if (dayNumber[vcIndex] < (DAYS_IN_WEEK- 1))
                 {
                   //Configure the next zone
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_ALL_DURATIONS);
-                  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                                virtualCircuitList[vcIndex].commandTimer,
-                                CMD_SET_DAY_OF_WEEK_2);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_ALL_DURATIONS);
+                  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                                   virtualCircuitList[vcIndex].commandTimer,
+                                   CMD_SET_DAY_OF_WEEK_2);
                   return true;
                 }
                 break;
@@ -2574,6 +2894,11 @@ bool issueVcCommands(int vcIndex)
       //Done processing VC commands
       if (DEBUG_CMD_ISSUE && virtualCircuitList[vcIndex].commandTimer)
         printf ("VC %d command list empty\n", vcIndex);
+      if (LOG_SCHEDULE_ISSUE && virtualCircuitList[vcIndex].commandTimer)
+      {
+        sprintf (logBuffer, "VC %d command list empty\n", vcIndex);
+        logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+      }
       virtualCircuitList[vcIndex].activeCommand = CMD_LIST_SIZE;
       virtualCircuitList[vcIndex].commandTimer = 0;
     }
@@ -2650,6 +2975,12 @@ int getControllerNames(MYSQL * mysql, char ** names, char ** ids, int * zones, b
         if (DEBUG_SPRINKLER_CHANGES)
           printf("VC %d: %d zone controller near %s has ID: %s \n",
                  vcIndex, zoneCount, name, id);
+        if (LOG_SPRINKLER_CHANGES)
+        {
+          sprintf(logBuffer, "VC %d: %d zone controller near %s has ID: %s \n",
+                 vcIndex, zoneCount, name, id);
+          logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+        }
       }
     }
 
@@ -2706,6 +3037,11 @@ int getZoneConfiguration(MYSQL * mysql, ZONE_T * latching, ZONE_T * on,
         setMSecPerInch[(vc * ZONE_NUMBER_MAX) + index] = true;
         if (DEBUG_SPRINKLER_CHANGES)
           printf("VC: %s, Zone: %s, Latching: %d, On: %d\n", row[0], row[1], type, onOff);
+        if (LOG_SPRINKLER_CHANGES)
+        {
+          sprintf(logBuffer, "VC: %s, Zone: %s, Latching: %d, On: %d\n", row[0], row[1], type, onOff);
+          logTimeStampAndData(vc, logBuffer, strlen(logBuffer));
+        }
       }
     }
 
@@ -2772,6 +3108,12 @@ int getSprinklerControllerStartTimes(MYSQL * mysql, int32_t * startTimeArray, bo
         if (DEBUG_SPRINKLER_CHANGES)
           printf("VC: %d, DayOfWeek: %s, StartTime: %d:%02d:%02d\n",
                  vc, dayName[dayOfWeek], hours, minutes, seconds);
+        if (LOG_SPRINKLER_CHANGES)
+        {
+          sprintf(logBuffer, "VC: %d, DayOfWeek: %s, StartTime: %d:%02d:%02d\n",
+                 vc, dayName[dayOfWeek], hours, minutes, seconds);
+          logTimeStampAndData(vc, logBuffer, strlen(logBuffer));
+        }
         milliseconds = (hours * MILLIS_IN_HOUR)
                      + (minutes * MILLIS_IN_MINUTE)
                      + (seconds * MILLIS_IN_SECOND);
@@ -2836,6 +3178,12 @@ int getZoneDurations(MYSQL * mysql, int32_t * durationArray, bool debug)
         if (DEBUG_SPRINKLER_CHANGES)
           printf("VC: %d, DayOfWeek: %s, Zone: %d, Duration: %d:%02d:%02d\n",
                  vc, dayName[dayOfWeek], zone, hours, minutes, seconds);
+        if (LOG_SPRINKLER_CHANGES)
+        {
+          sprintf(logBuffer, "VC: %d, DayOfWeek: %s, Zone: %d, Duration: %d:%02d:%02d\n",
+                 vc, dayName[dayOfWeek], zone, hours, minutes, seconds);
+          logTimeStampAndData(vc, logBuffer, strlen(logBuffer));
+        }
         milliseconds = (hours * MILLIS_IN_HOUR)
                      + (minutes * MILLIS_IN_MINUTE)
                      + (seconds * MILLIS_IN_SECOND);
@@ -2895,22 +3243,21 @@ void compareManualOn(ZONE_T * previous, ZONE_T * new)
   for (vcIndex = 0; vcIndex < MAX_VC; vcIndex++)
   {
     delta = previous[vcIndex] ^ new[vcIndex];
-printf("delta: 0x%02x\n", delta);
     if (delta)
     {
       //Set the zones that need updating
       manualZones[vcIndex] = delta;
 
       //Issue the commands to manually control the zone valve
-      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                    virtualCircuitList[vcIndex].commandTimer,
-                    PROGRAMMING_COMPLETED);
-      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                    virtualCircuitList[vcIndex].commandTimer,
-                    CMD_ATI12);
-      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                    virtualCircuitList[vcIndex].commandTimer,
-                    CMD_SELECT_ZONE);
+      COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                       virtualCircuitList[vcIndex].commandTimer,
+                       PROGRAMMING_COMPLETED);
+      COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                       virtualCircuitList[vcIndex].commandTimer,
+                       CMD_ATI12);
+      COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                       virtualCircuitList[vcIndex].commandTimer,
+                       CMD_SELECT_ZONE);
 
       //Mark this VC as needing updating
       virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
@@ -2963,15 +3310,15 @@ void compareMSecPerInch(uint32_t * previous, uint32_t * new)
         setMSecPerInch[(vcIndex * ZONE_NUMBER_MAX) + zoneIndex] = true;
 
         //Issue the commands to manually control the zone valve
-        COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                      virtualCircuitList[vcIndex].commandTimer,
-                      CMD_SELECT_ZONE);
-        COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                      virtualCircuitList[vcIndex].commandTimer,
-                      CMD_ATI12);
-        COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                      virtualCircuitList[vcIndex].commandTimer,
-                      PROGRAMMING_COMPLETED);
+        COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                         virtualCircuitList[vcIndex].commandTimer,
+                         CMD_SELECT_ZONE);
+        COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                         virtualCircuitList[vcIndex].commandTimer,
+                         CMD_ATI12);
+        COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                         virtualCircuitList[vcIndex].commandTimer,
+                         PROGRAMMING_COMPLETED);
 
         //Mark this VC as needing updating
         virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
@@ -3013,15 +3360,15 @@ void compareSolenoidTypes(ZONE_T * previous, ZONE_T * new)
       configureSolenoids[vcIndex] = delta;
 
       //Issue the commands to change the solenoid type
-      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                    virtualCircuitList[vcIndex].commandTimer,
-                    PROGRAMMING_COMPLETED);
-      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                    virtualCircuitList[vcIndex].commandTimer,
-                    CMD_ATI12);
-      COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                    virtualCircuitList[vcIndex].commandTimer,
-                    CMD_SELECT_ZONE);
+      COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                       virtualCircuitList[vcIndex].commandTimer,
+                       PROGRAMMING_COMPLETED);
+      COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                       virtualCircuitList[vcIndex].commandTimer,
+                       CMD_ATI12);
+      COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                       virtualCircuitList[vcIndex].commandTimer,
+                       CMD_SELECT_ZONE);
 
       //Mark this VC as needing updating
       virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
@@ -3092,6 +3439,24 @@ void compareSprinklerStartTimes(int32_t * previous, int32_t * new)
                   controllerNames[vcIndex], dayName[dayOfWeek],
                   hours, minutes, seconds);
         }
+        if (LOG_SPRINKLER_CHANGES)
+        {
+          time(&now);
+          timeStruct = localtime(&now);
+          seconds = new[dayIndex];
+          hours = seconds / MILLIS_IN_HOUR;
+          seconds -= hours * MILLIS_IN_HOUR;
+          minutes = seconds / MILLIS_IN_MINUTE;
+          seconds -= minutes * MILLIS_IN_MINUTE;
+          seconds = seconds / MILLIS_IN_SECOND;
+          sprintf (logBuffer, "%d-%02d-%02d %s %d:%02d:%02d: %s start time for %s is: %d:%02d:%02d\n",
+                  1900 + timeStruct->tm_year, 1 + timeStruct->tm_mon, timeStruct->tm_mday,
+                  dayName[timeStruct->tm_wday],
+                  timeStruct->tm_hour, timeStruct->tm_min, timeStruct->tm_sec,
+                  controllerNames[vcIndex], dayName[dayOfWeek],
+                  hours, minutes, seconds);
+          logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+        }
 
         //Update the start time
         previous[dayIndex] = new[dayIndex];
@@ -3100,15 +3465,15 @@ void compareSprinklerStartTimes(int32_t * previous, int32_t * new)
         setStartTimes[vcIndex] |= 1 << dayOfWeek;
 
         //Issue the commands to change the solenoid type
-        COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                      virtualCircuitList[vcIndex].commandTimer,
-                      PROGRAMMING_COMPLETED);
-        COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                      virtualCircuitList[vcIndex].commandTimer,
-                      CMD_ATI12);
-        COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                      virtualCircuitList[vcIndex].commandTimer,
-                      CMD_SET_DAY_OF_WEEK);
+        COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                         virtualCircuitList[vcIndex].commandTimer,
+                         PROGRAMMING_COMPLETED);
+        COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                         virtualCircuitList[vcIndex].commandTimer,
+                         CMD_ATI12);
+        COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                         virtualCircuitList[vcIndex].commandTimer,
+                         CMD_SET_DAY_OF_WEEK);
 
         //Mark this VC as needing updating
         virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
@@ -3165,6 +3530,24 @@ void compareZoneDurations(int32_t * previous, int32_t * new)
                     controllerNames[vcIndex], zoneIndex + 1, dayName[dayOfWeek],
                     hours, minutes, seconds);
           }
+          if (LOG_SPRINKLER_CHANGES)
+          {
+            time(&now);
+            timeStruct = localtime(&now);
+            seconds = new[index];
+            hours = seconds / MILLIS_IN_HOUR;
+            seconds -= hours * MILLIS_IN_HOUR;
+            minutes = seconds / MILLIS_IN_MINUTE;
+            seconds -= minutes * MILLIS_IN_MINUTE;
+            seconds = seconds / MILLIS_IN_SECOND;
+            sprintf (logBuffer, "%d-%02d-%02d %s %d:%02d:%02d: %s zone %d duration for %s is: %d:%02d:%02d\n",
+                    1900 + timeStruct->tm_year, 1 + timeStruct->tm_mon, timeStruct->tm_mday,
+                    dayName[timeStruct->tm_wday],
+                    timeStruct->tm_hour, timeStruct->tm_min, timeStruct->tm_sec,
+                    controllerNames[vcIndex], zoneIndex + 1, dayName[dayOfWeek],
+                    hours, minutes, seconds);
+            logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+          }
 
           //Update the start time
           previous[index] = new[index];
@@ -3176,15 +3559,15 @@ void compareZoneDurations(int32_t * previous, int32_t * new)
           setDurations[entry] = true;
 
           //Issue the commands to change the solenoid type
-          COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                        virtualCircuitList[vcIndex].commandTimer,
-                        PROGRAMMING_COMPLETED);
-          COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                        virtualCircuitList[vcIndex].commandTimer,
-                        CMD_ATI12);
-          COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                        virtualCircuitList[vcIndex].commandTimer,
-                        CMD_SET_DAY_OF_WEEK_2);
+          COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                           virtualCircuitList[vcIndex].commandTimer,
+                           PROGRAMMING_COMPLETED);
+          COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                           virtualCircuitList[vcIndex].commandTimer,
+                           CMD_ATI12);
+          COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                           virtualCircuitList[vcIndex].commandTimer,
+                           CMD_SET_DAY_OF_WEEK_2);
 
           //Mark this VC as needing updating
           virtualCircuitList[vcIndex].programUpdated = virtualCircuitList[vcIndex].runtime + 1;
@@ -3197,17 +3580,17 @@ void compareZoneDurations(int32_t * previous, int32_t * new)
 void collectWaterData(int vcIndex)
 {
   //Complete the programming
-  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                virtualCircuitList[vcIndex].commandTimer,
-                PROGRAMMING_COMPLETED);
-  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                virtualCircuitList[vcIndex].commandTimer,
-                CMD_ATI12);
+  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                   virtualCircuitList[vcIndex].commandTimer,
+                   PROGRAMMING_COMPLETED);
+  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                   virtualCircuitList[vcIndex].commandTimer,
+                   CMD_ATI12);
 
   //Get the water use
-  COMMAND_ISSUE(virtualCircuitList[vcIndex].commandQueue,
-                virtualCircuitList[vcIndex].commandTimer,
-                CMD_GET_WATER_USE);
+  COMMAND_SCHEDULE(virtualCircuitList[vcIndex].commandQueue,
+                   virtualCircuitList[vcIndex].commandTimer,
+                   CMD_GET_WATER_USE);
 }
 
 int main(int argc, char **argv)
@@ -3336,15 +3719,15 @@ int main(int argc, char **argv)
 
     //Perform the initialization commands
     pcCommandTimer = 1;
-    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATA);   //Get all the VC states
-    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI8);  //Get Radio unique ID
-    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI);   //Get Radio type
-    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_GET_SERVER_MODEL);
-    COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATI30); //Get myVC
+    COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_ATA);   //Get all the VC states
+    COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_ATI8);  //Get Radio unique ID
+    COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_ATI);   //Get Radio type
+    COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_GET_SERVER_MODEL);
+    COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_ATI30); //Get myVC
 
     //Break the links if requested
     if (breakLinks)
-      COMMAND_ISSUE(pcCommandQueue, pcCommandTimer, CMD_ATB); //Break all the VC links
+      COMMAND_SCHEDULE(pcCommandQueue, pcCommandTimer, CMD_ATB); //Break all the VC links
 
     //Initialize the weather station files
     status = initWeatherStation();
@@ -3408,7 +3791,8 @@ int main(int argc, char **argv)
       if (numfds < 0)
       {
         perror("ERROR: select call failed!");
-        status = errno;
+        strcpy(logBuffer, "ERROR: select call failed!\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
         break;
       }
 
@@ -3651,7 +4035,11 @@ int main(int argc, char **argv)
 
           //Determine if the local radio command queue is idle
           if (displayTitle)
+          {
             printf("PC: Idle\n");
+            sprintf(logBuffer, "PC: Idle\n");
+            logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+          }
 
           //Determine if there are any outstanding VC commands
           for (vcIndex = 0; vcIndex < MAX_VC; vcIndex++)
@@ -3670,6 +4058,8 @@ int main(int argc, char **argv)
                     {
                       displayTitle = false;
                       printf("Stalled commands:\n");
+                      sprintf(logBuffer, "Stalled commands:\n");
+                      logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
                     }
                     printf("    VC %d (%s): %d (%s, %s)\n",
                            vcIndex,
@@ -3677,6 +4067,20 @@ int main(int argc, char **argv)
                            cmd,
                            commandName[cmd],
                            (virtualCircuitList[vcIndex].activeCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
+                    if (LOG_CMD_ISSUE)
+                    {
+                      sprintf(logBuffer, "Stalled commands:\n");
+                      logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                      logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+                      sprintf(logBuffer, "    VC %d (%s): %d (%s, %s)\n",
+                             vcIndex,
+                             vcStateNames[virtualCircuitList[vcIndex].vcState],
+                             cmd,
+                             commandName[cmd],
+                             (virtualCircuitList[vcIndex].activeCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
+                      logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                      logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+                    }
                     break;
                   }
                 }
