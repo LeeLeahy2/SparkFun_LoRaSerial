@@ -16,6 +16,7 @@
 #define LOG_ALL                 0
 #define LOG_CMD_COMPLETE        1 //LOG_ALL
 #define LOG_CMD_ISSUE           1 //LOG_ALL
+#define LOG_CMD_SCHEDULE        1 //LOG_ALL
 #define LOG_DATA_ACK            LOG_ALL
 #define LOG_DATA_NACK           LOG_ALL
 #define LOG_FILE_PATH           "/var/www/html/MH2/vc-logs"
@@ -24,7 +25,6 @@
 #define LOG_RADIO_TO_HOST       LOG_ALL
 #define LOG_RESPONSE_TYPE       LOG_ALL
 #define LOG_RUNTIME             LOG_ALL
-#define LOG_SCHEDULE_ISSUE      1 //LOG_ALL
 #define LOG_SPRINKLER_CHANGES   1 //LOG_ALL
 #define LOG_VC_ID               1 //LOG_ALL
 #define LOG_VC_STATE            1 //LOG_ALL
@@ -128,7 +128,7 @@
         printf("VC %d %s done\n", vc, commandName[active]);             \
       }                                                                 \
     }                                                                   \
-    if (LOG_SCHEDULE_ISSUE)                                             \
+    if (LOG_CMD_SCHEDULE)                                               \
     {                                                                   \
       if (queue == pcCommandQueue)                                      \
       {                                                                 \
@@ -167,7 +167,7 @@
       }                                                               \
     }                                                                 \
   }                                                                   \
-  if (LOG_SCHEDULE_ISSUE)                                             \
+  if (LOG_CMD_SCHEDULE)                                               \
   {                                                                   \
     if (!COMMAND_PENDING(queue, cmd))                                 \
     {                                                                 \
@@ -1418,7 +1418,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   default:
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d unknown state!\n", srcVc);
-    if (LOG_SCHEDULE_ISSUE)
+    if (LOG_CMD_SCHEDULE)
     {
       sprintf(logBuffer, "VC %d unknown state!\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
@@ -1438,7 +1438,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     virtualCircuitList[srcVc].commandTimer = 0;
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d DOWN\n", srcVc);
-    if (LOG_SCHEDULE_ISSUE)
+    if (LOG_CMD_SCHEDULE)
     {
       sprintf(logBuffer, "VC %d DOWN\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
@@ -1459,7 +1459,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     {
       if (DEBUG_PC_CMD_ISSUE)
         printf("VC %d ALIVE\n", srcVc);
-      if (LOG_SCHEDULE_ISSUE)
+      if (LOG_CMD_SCHEDULE)
       {
         sprintf(logBuffer, "VC %d ALIVE\n", srcVc);
         logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
@@ -1487,7 +1487,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   case VC_STATE_SEND_UNKNOWN_ACKS:
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d SEND_UNKNOWN_ACKS\n", srcVc);
-    if (LOG_SCHEDULE_ISSUE)
+    if (LOG_CMD_SCHEDULE)
     {
       sprintf(logBuffer, "VC %d SEND_UNKNOWN_ACKS\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
@@ -1504,7 +1504,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   case VC_STATE_WAIT_SYNC_ACKS:
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d WAIT_SYNC_ACKS\n", srcVc);
-    if (LOG_SCHEDULE_ISSUE)
+    if (LOG_CMD_SCHEDULE)
     {
       sprintf(logBuffer, "VC %d WAIT_SYNC_ACKS\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
@@ -1550,7 +1550,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     }
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d CONNECTED\n", srcVc);
-    if (LOG_SCHEDULE_ISSUE)
+    if (LOG_CMD_SCHEDULE)
     {
       sprintf(logBuffer, "VC %d CONNECTED\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
@@ -2455,7 +2455,7 @@ bool issueVcCommands(int vcIndex)
                 {
                   if (DEBUG_PC_CMD_ISSUE)
                     printf("Migrating AT-CMDVC=%d and ATC commands to PC command queue\n", vcIndex);
-                  if (LOG_SCHEDULE_ISSUE)
+                  if (LOG_CMD_SCHEDULE)
                   {
                     sprintf(logBuffer, "Migrating AT-CMDVC=%d and ATC commands to PC command queue\n", vcIndex);
                     logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
@@ -2894,7 +2894,7 @@ bool issueVcCommands(int vcIndex)
       //Done processing VC commands
       if (DEBUG_CMD_ISSUE && virtualCircuitList[vcIndex].commandTimer)
         printf ("VC %d command list empty\n", vcIndex);
-      if (LOG_SCHEDULE_ISSUE && virtualCircuitList[vcIndex].commandTimer)
+      if (LOG_CMD_SCHEDULE && virtualCircuitList[vcIndex].commandTimer)
       {
         sprintf (logBuffer, "VC %d command list empty\n", vcIndex);
         logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
@@ -4077,7 +4077,7 @@ int main(int argc, char **argv)
                              cmd,
                              commandName[cmd],
                              (virtualCircuitList[vcIndex].activeCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
-                      if (LOG_SCHEDULE_ISSUE)
+                      if (LOG_CMD_SCHEDULE)
                       {
                         sprintf(logBuffer, "Stalled commands:\n");
                         logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
