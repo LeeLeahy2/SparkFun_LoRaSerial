@@ -21,11 +21,11 @@
 #define LOG_DATA_NACK           LOG_ALL
 #define LOG_FILE_PATH           "/var/www/html/MH2/vc-logs"
 #define LOG_HOST_TO_RADIO       LOG_ALL
-#define LOG_LINK_STATUS         1 //LOG_ALL
 #define LOG_RADIO_TO_HOST       LOG_ALL
 #define LOG_RESPONSE_TYPE       LOG_ALL
 #define LOG_RUNTIME             LOG_ALL
 #define LOG_SPRINKLER_CHANGES   1 //LOG_ALL
+#define LOG_LINK_TRANSITION     LOG_ALL
 #define LOG_VC_ID               1 //LOG_ALL
 #define LOG_VC_STATE            1 //LOG_ALL
 #define LOG_WATER_USE           1 //LOG_ALL
@@ -1331,13 +1331,13 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   virtualCircuitList[srcVc].vcState = newState;
 
   //Display the state if requested
-  if (DISPLAY_STATE_TRANSITION || LOG_LINK_STATUS
+  if (DISPLAY_STATE_TRANSITION || LOG_LINK_TRANSITION
     || (newState == VC_STATE_LINK_DOWN) || (previousState == VC_STATE_LINK_DOWN)
     || ((newState != previousState) && (virtualCircuitList[srcVc].activeCommand < CMD_LIST_SIZE)))
   {
     if (DISPLAY_STATE_TRANSITION)
       printf("VC%d: %s --> %s\n", srcVc, vcStateNames[previousState], vcStateNames[newState]);
-    if (LOG_LINK_STATUS)
+    if (LOG_LINK_TRANSITION)
     {
       sprintf(logBuffer, "VC%d: %s --> %s\n", srcVc, vcStateNames[previousState], vcStateNames[newState]);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
