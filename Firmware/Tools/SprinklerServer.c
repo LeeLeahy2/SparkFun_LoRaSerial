@@ -299,6 +299,7 @@ typedef struct _VIRTUAL_CIRCUIT
   uint64_t programmed;
   uint64_t programUpdated;
   uint64_t runtime;
+  time_t uptime;
   uint8_t uniqueId[UNIQUE_ID_BYTES];
   bool valid;
   WATER_USE gallons;
@@ -1316,8 +1317,12 @@ int hostToStdout(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t byte
 
 void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t length)
 {
+  time_t days;
+  time_t hours;
+  time_t minutes;
   int newState;
   int previousState;
+  time_t seconds;
   uint8_t srcVc;
   uint8_t uniqueId[UNIQUE_ID_BYTES];
   VIRTUAL_CIRCUIT * vc;
@@ -1454,11 +1459,33 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
       sprintf(logBuffer, "VC %d DOWN\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
     }
+    days = 0;
+    hours = 0;
+    minutes = 0;
+    seconds = 0;
+    if (previousState == VC_STATE_CONNECTED)
+    {
+      seconds = time(NULL) - vc->uptime;
+      days = seconds / SECS_IN_DAY;
+      seconds -= days * SECS_IN_DAY;
+      hours = seconds / SECS_IN_HOUR;
+      seconds -= hours * SECS_IN_HOUR;
+      minutes = seconds / SECS_IN_MINUTE;
+      seconds -= minutes * SECS_IN_MINUTE;
+    }
     if (DISPLAY_VC_STATE)
+    {
       printf("--------- VC %d DOWN ---------\n", srcVc);
+      printf("Uptime: %ld %ld:%02ld:%02ld\n", days, hours, minutes, seconds);
+      printf("\n");
+    }
     if (LOG_VC_STATE)
     {
       sprintf(logBuffer, "--------- VC %d DOWN ---------\n", srcVc);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "Uptime: %ld %ld:%02ld:%02ld\n", days, hours, minutes, seconds);
+      logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "\n");
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
     }
     break;
@@ -1578,6 +1605,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     {
       sprintf(logBuffer, "======= VC %d CONNECTED ======\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+      vc->uptime = time(NULL);
     }
     break;
   }
