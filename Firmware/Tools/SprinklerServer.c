@@ -1545,25 +1545,32 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     break;
 
   case VC_STATE_CONNECTED:
+    if ((pcActiveCommand == CMD_ATC) && COMMAND_PENDING(pcCommandQueue, CMD_ATC))
+    {
+      // Mark the ATC command as complete, it is always executed on the local radio
+      if (srcVc == pcCommandVc)
+        COMMAND_COMPLETE(pcCommandQueue, pcActiveCommand);
+      if ((pcCommandVc < MAX_VC) && (virtualCircuitList[pcCommandVc].activeCommand == CMD_ATC))
+        COMMAND_COMPLETE(virtualCircuitList[pcCommandVc].commandQueue, vc->activeCommand);
+    }
+
+    // When the sprinkler server starts up, it is possible for the VC state
+    // transition to go from DOWN directly to CONNECTED.  In this case the
+    // WAIT_CONNECTED command needs to be scheduled.
     if ((previousState == VC_STATE_LINK_DOWN) && (srcVc < MAX_VC)
       && (!COMMAND_PENDING(vc->commandQueue, CMD_WAIT_CONNECTED)))
     {
       //Issue the necessary commands when the link is connected
       COMMAND_SCHEDULE(vc->commandQueue, vc->commandTimer, CMD_WAIT_CONNECTED);
     }
+
+    // Display the connected status
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d CONNECTED\n", srcVc);
     if (LOG_CMD_SCHEDULE)
     {
       sprintf(logBuffer, "VC %d CONNECTED\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
-    }
-    if ((pcActiveCommand == CMD_ATC) && COMMAND_PENDING(pcCommandQueue, CMD_ATC))
-    {
-      if (srcVc == pcCommandVc)
-        COMMAND_COMPLETE(pcCommandQueue, pcActiveCommand);
-      if ((pcCommandVc < MAX_VC) && (virtualCircuitList[pcCommandVc].activeCommand == CMD_ATC))
-        COMMAND_COMPLETE(virtualCircuitList[pcCommandVc].commandQueue, virtualCircuitList[srcVc].activeCommand);
     }
     if (DISPLAY_VC_STATE)
       printf("======= VC %d CONNECTED ======\n", srcVc);
