@@ -13,6 +13,14 @@
 #include "Sprinkler_Server_Notification.h"
 #include "WeatherStation.h"
 
+#define LOG_ALL                 1
+#define LOG_CMD_COMPLETE        LOG_ALL
+#define LOG_CMD_ISSUE           LOG_ALL
+#define LOG_FILE_PATH           "/var/www/html/MH2/vc-logs"
+#define LOG_HOST_TO_RADIO       LOG_ALL
+#define LOG_RADIO_TO_HOST       LOG_ALL
+#define VC_PC                   VC_SERVER
+
 #define ISSUE_COMMANDS_IN_PARALLEL      1
 #ifndef POLL_TIMEOUT_USEC
 #define POLL_TIMEOUT_USEC       1000
@@ -101,12 +109,24 @@
     if (DEBUG_CMD_ISSUE)                                                \
     {                                                                   \
       if (queue == pcCommandQueue)                                      \
+      {                                                                 \
         printf("PC %s done\n", commandName[active]);                    \
+        if (LOG_CMD_COMPLETE)                                           \
+        {                                                               \
+          sprintf(logBuffer, "PC %s done\n", commandName[active]);      \
+          logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));     \
+        }                                                               \
+      }                                                                 \
       else                                                              \
       {                                                                 \
         int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0])   \
                * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);       \
         printf("VC %d %s done\n", vc, commandName[active]);             \
+        if (LOG_CMD_COMPLETE)                                           \
+        {                                                               \
+          sprintf(logBuffer, "VC %d %s done\n", vc, commandName[active]); \
+          logTimeStampAndData(vc, logBuffer, strlen(logBuffer));        \
+        }                                                               \
       }                                                                 \
     }                                                                   \
     queue[active / QUEUE_T_BITS] &= ~(1ull << (active & QUEUE_T_MASK)); \
@@ -121,12 +141,24 @@
     if (!COMMAND_PENDING(queue, cmd))                                 \
     {                                                                 \
       if (queue == pcCommandQueue)                                    \
+      {                                                               \
         printf("PC %s issued\n", commandName[cmd]);                   \
+        if (LOG_CMD_ISSUE)                                            \
+        {                                                             \
+          sprintf(logBuffer, "PC %s issued\n", commandName[cmd]);     \
+          logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));   \
+        }                                                             \
+      }                                                               \
       else                                                            \
       {                                                               \
         int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
                * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);     \
         printf("VC %d %s issued\n", vc, commandName[cmd]);            \
+        if (LOG_CMD_ISSUE)                                            \
+        {                                                             \
+          sprintf(logBuffer, "VC %d %s issued\n", vc, commandName[cmd]); \
+          logTimeStampAndData(vc, logBuffer, strlen(logBuffer));      \
+        }                                                             \
       }                                                               \
     }                                                                 \
   }                                                                   \
@@ -266,6 +298,9 @@ char * host;
 char htmlMessage[16384];
 uint8_t inputBuffer[INPUT_BUFFER_SIZE];
 ZONE_T latchingSolenoid[MAX_VC];
+char logBuffer[4096];
+char logErrorBuffer[4096];
+int logFile[MAX_VC];
 int manualControl[MAX_VC];
 ZONE_T manualOn[MAX_VC];
 ZONE_T manualZones[MAX_VC];
@@ -297,6 +332,234 @@ char vcCommandBuffer[MAX_VC][128];
 VIRTUAL_CIRCUIT virtualCircuitList[MAX_VC];
 volatile bool waitingForCommandComplete;
 int zoneNumber[MAX_VC];
+
+int logFileValidateVcIndex(int vcIndex);
+
+// Close the log files for each of the virtual circuits
+void logFileClose()
+{
+    int vcIndex;
+
+    // Close the log files
+    for (vcIndex = 0; vcIndex < MAX_VC; vcIndex++)
+    {
+        if (logFile[vcIndex] > 0)
+            close(logFile[vcIndex]);
+    }
+}
+
+// Open the log file associated with a vcIndex
+int logFileOpen(int vcIndex)
+{
+    char filename[256];
+    int logFileIndex;
+    int status;
+
+    status = -1;
+    do
+    {
+        // Validate the VC index
+        logFileIndex = logFileValidateVcIndex(vcIndex);
+
+        // Only open the file once
+        if (logFile[logFileIndex] > 0)
+        {
+            status = 0;
+            break;
+        }
+
+        // Create the log file name
+        sprintf (filename, "%s/vc%02d.txt", LOG_FILE_PATH, vcIndex);
+        status = open(filename, O_APPEND | O_CREAT | O_WRONLY, S_IRWXU | S_IRWXG | S_IROTH);
+
+        // Verify that the log file was created successfully
+        if (status < 0)
+        {
+            status = errno;
+            perror("ERROR: Failed to open VC log file!");
+            break;
+        }
+
+        // Save the file number
+        logFile[logFileIndex] = status;
+        status = 0;
+    } while (0);
+
+    // Return the open status
+    return status;
+}
+
+// Write data to the log file
+int logWrite(int vcIndex, char * text, int length)
+{
+    int bytesWritten;
+    int dataWritten;
+    int logFileIndex;
+    int status;
+
+    do
+    {
+        // Validate the VC index
+        logFileIndex = logFileValidateVcIndex(vcIndex);
+
+        // Open the file if necessary
+        status = logFileOpen(logFileIndex);
+        if (status)
+            break;
+
+        // Write the entire buffer to the log file or return an error
+        bytesWritten = 0;
+        while (bytesWritten < length)
+        {
+            // Write the data to the log file
+            dataWritten = write(logFile[logFileIndex], &text[bytesWritten], length - bytesWritten);
+
+            // Verify that the data was successfully written
+            if (dataWritten < 0)
+            {
+                status = errno;
+                perror("ERROR: Failed write to log file!");
+                break;
+            }
+
+            // Determine how much data was written
+            bytesWritten += dataWritten;
+        }
+    } while (0);
+
+    // Return the write status
+    return status;
+}
+
+// Write a timestamp to the log file
+int logTimeStamp(int vcIndex)
+{
+    time_t t;
+    char timeBuffer[32];
+    struct tm * tm;
+
+    // Get the current time
+    time(&t);
+    tm = localtime(&t);
+    sprintf(timeBuffer, "%04d%02d%02d%02d%02d%02d: ", tm->tm_year + 1900, tm->tm_mon + 1,
+            tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
+    return logWrite(vcIndex, timeBuffer, strlen(timeBuffer));
+}
+
+// Write timestamp and data
+int logTimeStampAndData(int vcIndex, char * text, int length)
+{
+    int logFileIndex;
+    int status;
+
+    // Validate the VC index
+    logFileIndex = logFileValidateVcIndex(vcIndex);
+
+    // Timestamp the line
+    status = logTimeStamp(logFileIndex);
+    if (!status)
+
+        // Output the line of text
+        status = logWrite(logFileIndex, text, length);
+    return status;
+}
+
+// Translate the vcIndex into a valid file index value
+int logFileValidateVcIndex(int vcIndex)
+{
+    int channel;
+    int error;
+    int logFileIndex;
+
+    // Validate the VC index
+    error = 1;
+    logFileIndex = VC_PC;
+
+    // Verify that it is within the 256 values of the VC index range
+    if ((vcIndex >= 0) && (vcIndex <= 255))
+    {
+        // Verify that a reserved channel is not being used
+        channel = (vcIndex & VCAB_CHANNEL_MASK) >> VCAB_NUMBER_BITS;
+        if ((channel < 3) || (channel > 4))
+        {
+            // Valid channel
+            error = 0;
+
+            // Determine if the local PC is being addressed
+            if (channel != 7)
+
+                // A local or remote radio is being addressed, extract the VC index
+                logFileIndex = vcIndex & VCAB_NUMBER_MASK;
+        }
+    }
+
+    // Log the error
+    if (error)
+    {
+        fprintf(stderr, "ERROR: Invalid vcIndex (%d)!\n", vcIndex);
+        sprintf(logErrorBuffer, "ERROR: Invalid vcIndex (%d)!\n", vcIndex);
+        logTimeStampAndData(logFileIndex, logErrorBuffer, strlen(logErrorBuffer));
+    }
+
+    // Return a valid log file index
+    return logFileIndex;
+}
+
+// Dump a buffer to the log file
+void logDumpBuffer(int vcIndex, uint8_t * data, int length)
+{
+  char byte;
+  int bytes;
+  uint8_t * dataEnd;
+  uint8_t * dataStart;
+  const int displayWidth = 16;
+  int index;
+  int logFileIndex;
+  char text[128];
+
+  // Validate the VC index
+  logFileIndex = logFileValidateVcIndex(vcIndex);
+
+  dataStart = data;
+  dataEnd = &data[length];
+  while (data < dataEnd)
+  {
+    // Display the offset
+    sprintf(text, "    0x%02x: ", (unsigned int)(data - dataStart));
+    length = strlen(text);
+
+    // Determine the number of bytes to display
+    bytes = dataEnd - data;
+    if (bytes > displayWidth)
+      bytes = displayWidth;
+
+    // Display the data bytes in hex
+    for (index = 0; index < bytes; index++)
+    {
+      sprintf(&text[length], " %02x", *data++);
+      length += 3;
+    }
+
+    // Space over to the ASCII display
+    for (; index < displayWidth; index++)
+    {
+      sprintf(&text[length], "   ");
+      length += 3;
+    }
+    sprintf(&text[length], "  ");
+    length += 3;
+
+    // Display the ASCII bytes
+    data -= bytes;
+    for (index = 0; index < bytes; index++)
+    {
+      byte = *data++;
+      text[length++] = ((byte < ' ') || (byte >= 0x7f)) ? '.' : byte;
+    }
+    text[length++] = '\n';
+    logTimeStampAndData(logFileIndex, text, length);
+  }
+}
 
 void dumpBuffer(uint8_t * data, int length)
 {
@@ -807,6 +1070,7 @@ int hostToRadio(uint8_t destVc, uint8_t * buffer, int length)
   int bytesSent;
   int bytesWritten;
   VC_SERIAL_MESSAGE_HEADER header;
+  int logFileIndex;
 
   //Build the virtual circuit serial header
   header.start = START_OF_VC_SERIAL;
@@ -819,6 +1083,17 @@ int hostToRadio(uint8_t destVc, uint8_t * buffer, int length)
   {
     dumpBuffer((uint8_t *)&header, VC_SERIAL_HEADER_BYTES);
     dumpBuffer(buffer, length);
+  }
+  if (LOG_HOST_TO_RADIO)
+  {
+    logDumpBuffer(VC_PC, (uint8_t *)&header, VC_SERIAL_HEADER_BYTES);
+    logFileIndex = logFileValidateVcIndex(destVc);
+    if (logFileIndex != VC_PC)
+    {
+      logDumpBuffer(logFileIndex, (uint8_t *)&header, VC_SERIAL_HEADER_BYTES);
+      logDumpBuffer(logFileIndex, buffer, length);
+    }
+    logDumpBuffer(VC_PC, buffer, length);
   }
 
   //Send the header
@@ -1460,6 +1735,7 @@ int radioToHost()
   int bytesSent;
   int bytesToRead;
   int bytesToSend;
+  int logFileIndex;
   static uint8_t * data = outputBuffer;
   static uint8_t * dataStart = outputBuffer;
   static uint8_t * dataEnd = outputBuffer;
@@ -1491,6 +1767,9 @@ int radioToHost()
     if (DUMP_RADIO_TO_PC)
       if (bytesRead)
         dumpBuffer(dataStart, dataEnd - dataStart);
+    if (LOG_RADIO_TO_HOST)
+      if (bytesRead)
+        logDumpBuffer(VC_PC, dataStart, dataEnd - dataStart);
 
     //The data read is a mix of debug serial output and virtual circuit messages
     //Any data before the VC_SERIAL_MESSAGE_HEADER is considered debug serial output
@@ -1546,6 +1825,35 @@ int radioToHost()
       printf("    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
       if (length > 0)
         dumpBuffer(data, length);
+      if (LOG_RADIO_TO_HOST)
+      {
+        logFileIndex = logFileValidateVcIndex((uint8_t)header->radio.destVc);
+        sprintf(logBuffer, "VC Header:\n");
+        logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+        sprintf(logBuffer, "    length: %d\n", header->radio.length);
+        logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+        sprintf(logBuffer, "    destVc: %d (0x%02x)\n", (uint8_t)header->radio.destVc, (uint8_t)header->radio.destVc);
+        logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+        sprintf(logBuffer, "    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
+        logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+        if (length > 0)
+          logDumpBuffer(logFileIndex, data, length);
+
+        if (logFileIndex != VC_PC)
+        {
+          logFileIndex = logFileValidateVcIndex((uint8_t)header->radio.destVc);
+          sprintf(logBuffer, "VC Header:\n");
+          logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+          sprintf(logBuffer, "    length: %d\n", header->radio.length);
+          logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+          sprintf(logBuffer, "    destVc: %d (0x%02x)\n", (uint8_t)header->radio.destVc, (uint8_t)header->radio.destVc);
+          logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+          sprintf(logBuffer, "    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
+          logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+          if (length > 0)
+            logDumpBuffer(logFileIndex, data, length);
+        }
+      }
     }
 
     //------------------------------
@@ -1601,6 +1909,18 @@ int radioToHost()
         if (length > 0)
           dumpBuffer(data, length);
       }
+
+      logFileIndex = logFileValidateVcIndex((uint8_t)header->radio.destVc);
+      sprintf(logBuffer, "Unknown message, VC Header:\n");
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "    length: %d\n", header->radio.length);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "    destVc: %d (0x%02x)\n", (uint8_t)header->radio.destVc, (uint8_t)header->radio.destVc);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "    srcVc: %d (0x%02x)\n", header->radio.srcVc, header->radio.srcVc);
+      logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));
+      if (length > 0)
+        logDumpBuffer(logFileIndex, data, length);
     }
 
     //Continue processing the rest of the data in the buffer
