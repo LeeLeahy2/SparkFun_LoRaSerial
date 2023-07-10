@@ -28,7 +28,8 @@
 #define LOG_SPRINKLER_CHANGES   1 //LOG_ALL
 #define LOG_LINK_TRANSITION     LOG_ALL
 #define LOG_VC_ID               1 //LOG_ALL
-#define LOG_VC_STATE            1 //LOG_ALL
+#define LOG_VC_STATE            LOG_ALL
+#define LOG_VC_UP_DOWN          1 //LOG_ALL
 #define LOG_WATER_USE           1 //LOG_ALL
 #define VC_PC                   VC_SERVER
 
@@ -1479,7 +1480,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
       printf("Uptime: %ld %ld:%02ld:%02ld\n", days, hours, minutes, seconds);
       printf("\n");
     }
-    if (LOG_VC_STATE)
+    if (LOG_VC_STATE || LOG_VC_UP_DOWN)
     {
       sprintf(logBuffer, "--------- VC %d DOWN ---------\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
@@ -1509,7 +1510,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
 
     if (DISPLAY_VC_STATE)
       printf("-=--=--=- VC %d ALIVE =--=--=-\n", srcVc);
-    if (LOG_VC_STATE)
+    if (LOG_VC_STATE || LOG_VC_UP_DOWN)
     {
       sprintf(logBuffer, "-=--=--=- VC %d ALIVE =--=--=-\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
@@ -1601,7 +1602,7 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     }
     if (DISPLAY_VC_STATE)
       printf("======= VC %d CONNECTED ======\n", srcVc);
-    if (LOG_VC_STATE)
+    if (LOG_VC_STATE || LOG_VC_UP_DOWN)
     {
       sprintf(logBuffer, "======= VC %d CONNECTED ======\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
