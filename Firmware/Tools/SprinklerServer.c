@@ -1318,8 +1318,10 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
 {
   int newState;
   int previousState;
-  int srcVc;
+  uint8_t srcVc;
   uint8_t uniqueId[UNIQUE_ID_BYTES];
+  VIRTUAL_CIRCUIT * vc;
+  int vcIndex;
   VC_STATE_MESSAGE * vcMsg;
 
   //Remember the previous state
@@ -1329,12 +1331,20 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
 
   //Set the new state
   newState = vcMsg->vcState;
-  virtualCircuitList[srcVc].vcState = newState;
+  if (srcVc >= MAX_VC)
+  {
+    printf("ERROR: Invalid VC address (%d, 0x%02x)!\n", srcVc, srcVc);
+    sprintf(logBuffer, "ERROR: Invalid VC address (%d, 0x%02x)!\n", srcVc, srcVc);
+    logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+    return;
+  }
+  vc = &virtualCircuitList[srcVc];
+  vc->vcState = newState;
 
   //Display the state if requested
   if (DISPLAY_STATE_TRANSITION || LOG_LINK_TRANSITION
     || (newState == VC_STATE_LINK_DOWN) || (previousState == VC_STATE_LINK_DOWN)
-    || ((newState != previousState) && (virtualCircuitList[srcVc].activeCommand < CMD_LIST_SIZE)))
+    || ((newState != previousState) && (vc->activeCommand < CMD_LIST_SIZE)))
   {
     if (DISPLAY_STATE_TRANSITION)
       printf("VC%d: %s --> %s\n", srcVc, vcStateNames[previousState], vcStateNames[newState]);
@@ -1348,14 +1358,14 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   //Save the LoRaSerial radio's unique ID
   //Determine if the PC's value is valid
   memset(uniqueId, UNIQUE_ID_ERASE_VALUE, sizeof(uniqueId));
-  if (!virtualCircuitList[srcVc].valid)
+  if (!vc->valid)
   {
     //Determine if the radio knows the value
     if (memcmp(vcMsg->uniqueId, uniqueId, sizeof(uniqueId)) != 0)
     {
       //The radio knows the value, save it in the PC
-      memcpy(virtualCircuitList[srcVc].uniqueId, vcMsg->uniqueId, sizeof(vcMsg->uniqueId));
-      virtualCircuitList[srcVc].valid = true;
+      memcpy(vc->uniqueId, vcMsg->uniqueId, sizeof(vcMsg->uniqueId));
+      vc->valid = true;
 
       //Display this ID value
       if (DISPLAY_VC_ID)
@@ -1383,12 +1393,12 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   else
   {
     //Determine if the radio has changed for this VC
-    if ((memcmp(vcMsg->uniqueId, virtualCircuitList[srcVc].uniqueId, sizeof(vcMsg->uniqueId)) != 0)
+    if ((memcmp(vcMsg->uniqueId, vc->uniqueId, sizeof(vcMsg->uniqueId)) != 0)
         && (memcmp(vcMsg->uniqueId, uniqueId, sizeof(uniqueId)) != 0))
     {
       //The radio knows the value, save it in the PC
-      memcpy(virtualCircuitList[srcVc].uniqueId, vcMsg->uniqueId, sizeof(vcMsg->uniqueId));
-      virtualCircuitList[srcVc].valid = true;
+      memcpy(vc->uniqueId, vcMsg->uniqueId, sizeof(vcMsg->uniqueId));
+      vc->valid = true;
 
       //Display this ID value
       if (DISPLAY_VC_ID)
@@ -1435,8 +1445,8 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
 
   case VC_STATE_LINK_DOWN:
     //Stop the command processing for this VC
-    virtualCircuitList[srcVc].activeCommand = CMD_LIST_SIZE;
-    virtualCircuitList[srcVc].commandTimer = 0;
+    vc->activeCommand = CMD_LIST_SIZE;
+    vc->commandTimer = 0;
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d DOWN\n", srcVc);
     if (LOG_CMD_SCHEDULE)
@@ -1465,15 +1475,9 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
         sprintf(logBuffer, "VC %d ALIVE\n", srcVc);
         logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
       }
-      COMMAND_SCHEDULE(virtualCircuitList[srcVc].commandQueue,
-                       virtualCircuitList[srcVc].commandTimer,
-                       CMD_WAIT_CONNECTED);
-      COMMAND_SCHEDULE(virtualCircuitList[srcVc].commandQueue,
-                       virtualCircuitList[srcVc].commandTimer,
-                       CMD_ATC);
-      COMMAND_SCHEDULE(virtualCircuitList[srcVc].commandQueue,
-                       virtualCircuitList[srcVc].commandTimer,
-                       CMD_AT_CMDVC);
+      COMMAND_SCHEDULE(vc->commandQueue, vc->commandTimer, CMD_WAIT_CONNECTED);
+      COMMAND_SCHEDULE(vc->commandQueue, vc->commandTimer, CMD_ATC);
+      COMMAND_SCHEDULE(vc->commandQueue, vc->commandTimer, CMD_AT_CMDVC);
     }
 
     if (DISPLAY_VC_STATE)
@@ -1542,12 +1546,10 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
 
   case VC_STATE_CONNECTED:
     if ((previousState == VC_STATE_LINK_DOWN) && (srcVc < MAX_VC)
-      && (!COMMAND_PENDING(virtualCircuitList[srcVc].commandQueue, CMD_WAIT_CONNECTED)))
+      && (!COMMAND_PENDING(vc->commandQueue, CMD_WAIT_CONNECTED)))
     {
       //Issue the necessary commands when the link is connected
-      COMMAND_SCHEDULE(virtualCircuitList[srcVc].commandQueue,
-                       virtualCircuitList[srcVc].commandTimer,
-                       CMD_WAIT_CONNECTED);
+      COMMAND_SCHEDULE(vc->commandQueue, vc->commandTimer, CMD_WAIT_CONNECTED);
     }
     if (DEBUG_PC_CMD_ISSUE)
       printf("VC %d CONNECTED\n", srcVc);
