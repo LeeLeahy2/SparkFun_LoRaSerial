@@ -20,7 +20,7 @@
 #define LOG_DATA_NACK           LOG_ALL
 #define LOG_FILE_PATH           "/var/www/html/MH2/vc-logs"
 #define LOG_HOST_TO_RADIO       LOG_ALL
-#define LOG_LINK_STATUS         1 //LOG_ALL
+#define LOG_LINK_STATUS         LOG_ALL
 #define LOG_RADIO_TO_HOST       LOG_ALL
 #define LOG_RESPONSE_TYPE       LOG_ALL
 #define LOG_RUNTIME             LOG_ALL
@@ -3781,6 +3781,8 @@ int main(int argc, char **argv)
     printf("Waiting for VC data...\n");
     while (1)
     {
+      bool timeoutDetected;
+
       //Set the timeout
       timeout.tv_sec = 0;
       timeout.tv_usec = POLL_TIMEOUT_USEC;
@@ -3790,11 +3792,15 @@ int main(int argc, char **argv)
       numfds = select(maxfds + 1, &currentfds, NULL, NULL, &timeout);
       if (numfds < 0)
       {
+        status = errno;
         perror("ERROR: select call failed!");
         strcpy(logBuffer, "ERROR: select call failed!\n");
         logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
         break;
       }
+
+      //Check for timeout
+      timeoutDetected = (numfds == 0);
 
       //Determine if console input is available
       if (FD_ISSET(STDIN, &currentfds))
@@ -3883,7 +3889,7 @@ int main(int argc, char **argv)
       // Check for timeout
       //----------------------------------------
 
-      if (numfds == 0)
+      if (timeoutDetected)
       {
         timeoutCount++;
 
@@ -3987,72 +3993,31 @@ int main(int argc, char **argv)
                   usage.ru_maxrss, usage.ru_majflt, usage.ru_inblock, usage.ru_oublock);
 */
         }
-      }
 
-      //----------------------------------------
-      // Check for stalled commands
-      //----------------------------------------
+        //----------------------------------------
+        // Check for stalled commands
+        //----------------------------------------
 
-      //Deterine if the command processor is running
-      if (commandProcessorRunning)
-      {
-        //Determine if it is time to check for a command processor stall
+        //Determine if the command processor is running
         if (commandProcessorRunning)
-          commandProcessorRunning--;
-        if (!commandProcessorRunning)
         {
-          //The command processor is either stalled or complete
-          //Determine if there are any outsanding commands to be processed
-          displayTitle = true;
-          for (int cmdBlock = 0; cmdBlock < COMMAND_QUEUE_SIZE; cmdBlock++)
+          //Determine if it is time to check for a command processor stall
+          if (commandProcessorRunning)
+            commandProcessorRunning--;
+          if (!commandProcessorRunning)
           {
-            if (pcCommandQueue[cmdBlock])
-            {
-              //Display the next outstanding command
-              int cmdBase = cmdBlock * QUEUE_T_BITS;
-              for (cmd = cmdBase; cmd < (cmdBase + QUEUE_T_BITS); cmd++)
-              {
-                if (COMMAND_PENDING(pcCommandQueue, cmd))
-                {
-                  if (displayTitle)
-                  {
-                    displayTitle = false;
-                    printf("Stalled commands:\n");
-                  }
-                  printf("    PC: %d (%s, %s)\n",
-                         cmd,
-                         commandName[cmd],
-                         (pcActiveCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
-                  break;
-                }
-              }
-
-              //Check for a stalled command
-              if (cmd < (cmdBase + QUEUE_T_BITS))
-                break;
-            }
-          }
-
-          //Determine if the local radio command queue is idle
-          if (displayTitle)
-          {
-            printf("PC: Idle\n");
-            sprintf(logBuffer, "PC: Idle\n");
-            logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
-          }
-
-          //Determine if there are any outstanding VC commands
-          for (vcIndex = 0; vcIndex < MAX_VC; vcIndex++)
-          {
+            //The command processor is either stalled or complete
+            //Determine if there are any outsanding commands to be processed
+            displayTitle = true;
             for (int cmdBlock = 0; cmdBlock < COMMAND_QUEUE_SIZE; cmdBlock++)
             {
-              if (virtualCircuitList[vcIndex].commandQueue[cmdBlock])
+              if (pcCommandQueue[cmdBlock])
               {
                 //Display the next outstanding command
                 int cmdBase = cmdBlock * QUEUE_T_BITS;
                 for (cmd = cmdBase; cmd < (cmdBase + QUEUE_T_BITS); cmd++)
                 {
-                  if (COMMAND_PENDING(virtualCircuitList[vcIndex].commandQueue, cmd))
+                  if (COMMAND_PENDING(pcCommandQueue, cmd))
                   {
                     if (displayTitle)
                     {
@@ -4061,26 +4026,15 @@ int main(int argc, char **argv)
                       sprintf(logBuffer, "Stalled commands:\n");
                       logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
                     }
-                    printf("    VC %d (%s): %d (%s, %s)\n",
-                           vcIndex,
-                           vcStateNames[virtualCircuitList[vcIndex].vcState],
+                    printf("    PC: %d (%s, %s)\n",
                            cmd,
                            commandName[cmd],
-                           (virtualCircuitList[vcIndex].activeCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
-                    if (LOG_CMD_ISSUE)
-                    {
-                      sprintf(logBuffer, "Stalled commands:\n");
-                      logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
-                      logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
-                      sprintf(logBuffer, "    VC %d (%s): %d (%s, %s)\n",
-                             vcIndex,
-                             vcStateNames[virtualCircuitList[vcIndex].vcState],
-                             cmd,
-                             commandName[cmd],
-                             (virtualCircuitList[vcIndex].activeCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
-                      logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
-                      logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
-                    }
+                           (pcActiveCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
+                    sprintf(logBuffer, "    PC: %d (%s, %s)\n",
+                           cmd,
+                           commandName[cmd],
+                           (pcActiveCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
+                    logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
                     break;
                   }
                 }
@@ -4088,6 +4042,63 @@ int main(int argc, char **argv)
                 //Check for a stalled command
                 if (cmd < (cmdBase + QUEUE_T_BITS))
                   break;
+              }
+            }
+
+            //Determine if the local radio command queue is idle
+            if (displayTitle)
+            {
+              printf("PC: Idle\n");
+              sprintf(logBuffer, "PC: Idle\n");
+              logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+            }
+
+            //Determine if there are any outstanding VC commands
+            for (vcIndex = 0; vcIndex < MAX_VC; vcIndex++)
+            {
+              for (int cmdBlock = 0; cmdBlock < COMMAND_QUEUE_SIZE; cmdBlock++)
+              {
+                if (virtualCircuitList[vcIndex].commandQueue[cmdBlock])
+                {
+                  //Display the next outstanding command
+                  int cmdBase = cmdBlock * QUEUE_T_BITS;
+                  for (cmd = cmdBase; cmd < (cmdBase + QUEUE_T_BITS); cmd++)
+                  {
+                    if (COMMAND_PENDING(virtualCircuitList[vcIndex].commandQueue, cmd))
+                    {
+                      if (displayTitle)
+                      {
+                        displayTitle = false;
+                        printf("Stalled commands:\n");
+                      }
+                      printf("    VC %d (%s): %d (%s, %s)\n",
+                             vcIndex,
+                             vcStateNames[virtualCircuitList[vcIndex].vcState],
+                             cmd,
+                             commandName[cmd],
+                             (virtualCircuitList[vcIndex].activeCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
+                      if (LOG_SCHEDULE_ISSUE)
+                      {
+                        sprintf(logBuffer, "Stalled commands:\n");
+                        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                        logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+                        sprintf(logBuffer, "    VC %d (%s): %d (%s, %s)\n",
+                               vcIndex,
+                               vcStateNames[virtualCircuitList[vcIndex].vcState],
+                               cmd,
+                               commandName[cmd],
+                               (virtualCircuitList[vcIndex].activeCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
+                        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+                        logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+                      }
+                      break;
+                    }
+                  }
+
+                  //Check for a stalled command
+                  if (cmd < (cmdBase + QUEUE_T_BITS))
+                    break;
+                }
               }
             }
           }
