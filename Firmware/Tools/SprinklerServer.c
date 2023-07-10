@@ -3775,7 +3775,7 @@ int main(int argc, char **argv)
     if (maxfds < radio)
       maxfds = radio;
     FD_ZERO(&readfds);
-    FD_SET(STDIN, &readfds);
+//    FD_SET(STDIN, &readfds);
     FD_SET(radio, &readfds);
 
     printf("Waiting for VC data...\n");
