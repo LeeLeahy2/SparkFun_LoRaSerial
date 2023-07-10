@@ -20,7 +20,7 @@
 #define LOG_DATA_NACK           LOG_ALL
 #define LOG_FILE_PATH           "/var/www/html/MH2/vc-logs"
 #define LOG_HOST_TO_RADIO       LOG_ALL
-#define LOG_LINK_STATUS         LOG_ALL
+#define LOG_LINK_STATUS         1 //LOG_ALL
 #define LOG_RADIO_TO_HOST       LOG_ALL
 #define LOG_RESPONSE_TYPE       LOG_ALL
 #define LOG_RUNTIME             LOG_ALL
@@ -33,10 +33,10 @@
 
 #define ISSUE_COMMANDS_IN_PARALLEL      1
 #ifndef POLL_TIMEOUT_USEC
-#define POLL_TIMEOUT_USEC       1000
+#define POLL_TIMEOUT_USEC       (10 * 1000)
 #endif  // POLL_TIMEOUT_USEC
 
-#define ONE_SECOND_COUNT        20 // (1000000 / POLL_TIMEOUT_USEC)
+#define ONE_SECOND_COUNT        100 // (1000000 / POLL_TIMEOUT_USEC)
 #define COMMAND_POLL_COUNT      (ONE_SECOND_COUNT / 20) //50 mSec
 #define STALL_CHECK_COUNT       15 * ONE_SECOND_COUNT  //15 Sec
 
