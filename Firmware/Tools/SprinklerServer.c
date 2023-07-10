@@ -124,9 +124,9 @@
         printf("PC %s done\n", commandName[active]);                    \
       else                                                              \
       {                                                                 \
-        int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0])   \
+        int vcNum = (&queue[0] - &virtualCircuitList[0].commandQueue[0])\
                * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);       \
-        printf("VC %d %s done\n", vc, commandName[active]);             \
+        printf("VC %d %s done\n", vcNum, commandName[active]);          \
       }                                                                 \
     }                                                                   \
     if (LOG_CMD_SCHEDULE)                                               \
@@ -138,10 +138,10 @@
       }                                                                 \
       else                                                              \
       {                                                                 \
-        int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0])   \
+        int vcNum = (&queue[0] - &virtualCircuitList[0].commandQueue[0])\
                * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);       \
-        int logFileIndex = logFileValidateVcIndex(vc);                  \
-        sprintf(logBuffer, "VC %d %s done\n", vc, commandName[active]); \
+        int logFileIndex = logFileValidateVcIndex(vcNum);               \
+        sprintf(logBuffer, "VC %d %s done\n", vcNum, commandName[active]); \
         logTimeStampAndData(logFileIndex, logBuffer, strlen(logBuffer));\
         if (logFileIndex != VC_PC)                                      \
           logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));     \
@@ -162,9 +162,9 @@
         printf("PC %s scheduled\n", commandName[cmd]);                \
       else                                                            \
       {                                                               \
-        int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
+        int vcNum = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
                * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);     \
-        printf("VC %d %s scheduled\n", vc, commandName[cmd]);         \
+        printf("VC %d %s scheduled\n", vcNum, commandName[cmd]);      \
       }                                                               \
     }                                                                 \
   }                                                                   \
@@ -179,10 +179,10 @@
       }                                                               \
       else                                                            \
       {                                                               \
-        int vc = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
+        int vcNum = (&queue[0] - &virtualCircuitList[0].commandQueue[0]) \
                * sizeof(QUEUE_T) / sizeof(virtualCircuitList[0]);     \
-        sprintf(logBuffer, "VC %d %s scheduled\n", vc, commandName[cmd]);\
-        logTimeStampAndData(vc, logBuffer, strlen(logBuffer));        \
+        sprintf(logBuffer, "VC %d %s scheduled\n", vcNum, commandName[cmd]);\
+        logTimeStampAndData(vcNum, logBuffer, strlen(logBuffer));     \
       }                                                               \
     }                                                                 \
   }                                                                   \
