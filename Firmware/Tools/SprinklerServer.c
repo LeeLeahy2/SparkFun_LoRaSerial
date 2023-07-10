@@ -21,6 +21,8 @@
 #define LOG_DATA_ACK            LOG_ALL
 #define LOG_DATA_NACK           LOG_ALL
 #define LOG_DATA_NACK_COUNT     1 //LOG_ALL
+#define LOG_DB_ERROR            1
+#define LOG_DB_UPDATES          1 //LOG_ALL
 #define LOG_FILE_PATH           "/var/www/html/MH2/vc-logs"
 #define LOG_HOST_TO_RADIO       LOG_ALL
 #define LOG_RADIO_TO_HOST       LOG_ALL
@@ -1327,6 +1329,8 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   int previousState;
   time_t seconds;
   uint8_t srcVc;
+  MYSQL_STMT * statement;
+  char string[256];
   uint8_t uniqueId[UNIQUE_ID_BYTES];
   VIRTUAL_CIRCUIT * vc;
   int vcIndex;
@@ -1626,6 +1630,63 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
   {
     commandStatus = VC_CMD_ERROR;
     waitingForCommandComplete = false;
+  }
+
+  //Allocate the SQL statement
+  statement = mysql_stmt_init(mysql);
+  if (!statement)
+  {
+    fprintf(stderr, "ERROR: VC update failed calling mysql_stmt_init\n");
+    fprintf(stderr, "Out of memory\n");
+    if (LOG_DB_ERROR)
+    {
+      sprintf(logBuffer, "ERROR: VC update failed calling mysql_stmt_init\n");
+      logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      sprintf(logBuffer, "Out of memory\n");
+      logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+    }
+  }
+  else
+  {
+    //Build the update command
+    sprintf(string, "UPDATE vc_state SET VcState = %d WHERE (VcNumber = %d)",
+            newState, srcVc);
+    if (DEBUG_DATABASE_UPDATES)
+      printf("SQL: %s\n", string);
+    if (LOG_DB_UPDATES)
+    {
+      sprintf(logBuffer, "SQL: %s\n", string);
+      logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+    }
+    if (mysql_stmt_prepare(statement, string, strlen(string)))
+    {
+      fprintf(stderr, "ERROR: VC update failed calling mysql_stmt_prepare\n");
+      fprintf(stderr, "%s\n", mysql_stmt_error(statement));
+      if (LOG_DB_ERROR)
+      {
+        sprintf(logBuffer, "ERROR: VC update failed calling mysql_stmt_prepare\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+        sprintf(logBuffer, "%s\n", mysql_stmt_error(statement));
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
+    }
+
+    //Execute the update statement
+    else if (mysql_stmt_execute(statement))
+    {
+      fprintf(stderr, "ERROR: VC update failed calling mysql_stmt_execute\n");
+      fprintf(stderr, "%s\n", mysql_stmt_error(statement));
+      if (LOG_DB_ERROR)
+      {
+        sprintf(logBuffer, "ERROR: VC update failed calling mysql_stmt_execute\n");
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+        sprintf(logBuffer, "%s\n", mysql_stmt_error(statement));
+        logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
+      }
+    }
+
+    //Done with the SQL statement
+    mysql_stmt_close(statement);
   }
 
   //Clear the NACK count
