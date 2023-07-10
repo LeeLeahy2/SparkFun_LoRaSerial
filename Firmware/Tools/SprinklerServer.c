@@ -31,7 +31,7 @@
 #define LOG_WATER_USE           1 //LOG_ALL
 #define VC_PC                   VC_SERVER
 
-#define ISSUE_COMMANDS_IN_PARALLEL      1
+#define ISSUE_COMMANDS_IN_PARALLEL      0
 #ifndef POLL_TIMEOUT_USEC
 #define POLL_TIMEOUT_USEC       (10 * 1000)
 #endif  // POLL_TIMEOUT_USEC
