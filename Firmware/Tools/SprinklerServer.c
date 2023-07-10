@@ -20,6 +20,7 @@
 #define LOG_CMD_STALLED         1 //LOG_ALL
 #define LOG_DATA_ACK            LOG_ALL
 #define LOG_DATA_NACK           LOG_ALL
+#define LOG_DATA_NACK_COUNT     1 //LOG_ALL
 #define LOG_FILE_PATH           "/var/www/html/MH2/vc-logs"
 #define LOG_HOST_TO_RADIO       LOG_ALL
 #define LOG_RADIO_TO_HOST       LOG_ALL
@@ -297,6 +298,7 @@ typedef struct _VIRTUAL_CIRCUIT
   int collectionTimeSec[DAYS_IN_WEEK];
   QUEUE_T commandQueue[COMMAND_QUEUE_SIZE];
   uint32_t commandTimer;
+  uint32_t nackCount;
   uint64_t programmed;
   uint64_t programUpdated;
   uint64_t runtime;
@@ -1476,12 +1478,19 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     }
     if (DISPLAY_VC_STATE)
     {
+      if (vc->nackCount)
+        printf("***** NACK count: %d\n", vc->nackCount);
       printf("--------- VC %d DOWN ---------\n", srcVc);
       printf("Uptime: %ld %ld:%02ld:%02ld\n", days, hours, minutes, seconds);
       printf("\n");
     }
     if (LOG_VC_STATE || LOG_VC_UP_DOWN)
     {
+      if (vc->nackCount)
+      {
+        sprintf(logBuffer, "***** NACK count: %d\n", vc->nackCount);
+        logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
+      }
       sprintf(logBuffer, "--------- VC %d DOWN ---------\n", srcVc);
       logTimeStampAndData(srcVc, logBuffer, strlen(logBuffer));
       sprintf(logBuffer, "Uptime: %ld %ld:%02ld:%02ld\n", days, hours, minutes, seconds);
@@ -1618,15 +1627,34 @@ void radioToPcLinkStatus(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint
     commandStatus = VC_CMD_ERROR;
     waitingForCommandComplete = false;
   }
+
+  //Clear the NACK count
+  vc->nackCount = 0;
 }
 
 void radioDataAck(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t length)
 {
+  VIRTUAL_CIRCUIT * vc;
+  uint8_t vcIndex;
   VC_DATA_ACK_NACK_MESSAGE * vcMsg;
 
   vcMsg = (VC_DATA_ACK_NACK_MESSAGE *)data;
   if (DISPLAY_DATA_ACK)
     printf("ACK from VC %d\n", vcMsg->msgDestVc);
+  if (LOG_DATA_NACK_COUNT)
+  {
+    vcIndex = logFileValidateVcIndex(vcMsg->msgDestVc);
+    if (vcIndex < MAX_VC)
+    {
+      vc = &virtualCircuitList[vcIndex];
+      if (vc->nackCount)
+      {
+        sprintf(logBuffer, "***** NACK count: %d\n", vc->nackCount);
+        logTimeStampAndData(vcIndex, logBuffer, strlen(logBuffer));
+        vc->nackCount = 0;
+      }
+    }
+  }
   if (LOG_DATA_ACK)
   {
     sprintf(logBuffer, "ACK from VC %d\n", vcMsg->msgDestVc);
@@ -1637,6 +1665,7 @@ void radioDataAck(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t len
 void radioDataNack(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t length)
 {
   int index;
+  VIRTUAL_CIRCUIT * vc;
   int vcIndex;
   VC_DATA_ACK_NACK_MESSAGE * vcMsg;
 
@@ -1648,6 +1677,14 @@ void radioDataNack(VC_SERIAL_MESSAGE_HEADER * header, uint8_t * data, uint8_t le
   {
     sprintf(logBuffer, "NACK from VC %d\n", vcIndex);
     logTimeStampAndData(vcMsg->msgDestVc, logBuffer, strlen(logBuffer));
+  }
+  if (LOG_DATA_NACK_COUNT)
+  {
+    if (vcIndex < MAX_VC)
+    {
+      vc = &virtualCircuitList[vcIndex];
+      vc->nackCount += 1;
+    }
   }
 
   //Clear the command queue for this VC
