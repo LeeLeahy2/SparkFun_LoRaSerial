@@ -17,6 +17,7 @@
 #define LOG_CMD_COMPLETE        1 //LOG_ALL
 #define LOG_CMD_ISSUE           1 //LOG_ALL
 #define LOG_CMD_SCHEDULE        1 //LOG_ALL
+#define LOG_CMD_STALLED         1 //LOG_ALL
 #define LOG_DATA_ACK            LOG_ALL
 #define LOG_DATA_NACK           LOG_ALL
 #define LOG_FILE_PATH           "/var/www/html/MH2/vc-logs"
@@ -4077,7 +4078,7 @@ int main(int argc, char **argv)
                              cmd,
                              commandName[cmd],
                              (virtualCircuitList[vcIndex].activeCommand < CMD_LIST_SIZE) ? "Active" : "Pending");
-                      if (LOG_CMD_SCHEDULE)
+                      if (LOG_CMD_SCHEDULE || LOG_CMD_STALLED)
                       {
                         sprintf(logBuffer, "Stalled commands:\n");
                         logTimeStampAndData(VC_PC, logBuffer, strlen(logBuffer));
