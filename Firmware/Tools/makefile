@@ -9,6 +9,7 @@
 ##########
 
 EXECUTABLES += Pipe_1
+EXECUTABLES += ProcessLog
 EXECUTABLES += Slow_Read
 EXECUTABLES += SprinklerServer
 EXECUTABLES += VcServerTest
@@ -56,6 +57,10 @@ $(COMMON_LIB): $(LIB_OBJS)
 ##########
 
 Pipe_1: Pipe_1.c $(COMMON_LIB)
+	$(CC) -o $@ $^
+	chmod o=rx $@
+
+ProcessLog: ProcessLog.c $(COMMON_LIB)
 	$(CC) -o $@ $^
 	chmod o=rx $@
 
