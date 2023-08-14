@@ -656,6 +656,10 @@ int main (int argc, char ** argv)
         int watering30Days = 0;
         int watering60Days = 0;
         int watering90Days = 0;
+        int wateringInterruptFailure = 0;
+        int wateringInterruptFailure30Days = 0;
+        int wateringInterruptFailure60Days = 0;
+        int wateringInterruptFailure90Days = 0;
 
         // Separate the analysis from the summary
         printf("%s", NEW_LINE);
@@ -677,6 +681,7 @@ int main (int argc, char ** argv)
                 {
                     failedToBoot30Days += failure->bootFailure ? 1 : 0;
                     failedToWater30Days += failure->wateringFailure ? 1 : 0;
+                    wateringInterruptFailure30Days += failure->wateringInterrupted ? 1 : 0;
                 }
 
                 // Count failures over 60 days
@@ -684,6 +689,7 @@ int main (int argc, char ** argv)
                 {
                     failedToBoot60Days += failure->bootFailure ? 1 : 0;
                     failedToWater60Days += failure->wateringFailure ? 1 : 0;
+                    wateringInterruptFailure60Days += failure->wateringInterrupted ? 1 : 0;
                 }
 
                 // Count failures over 90 days
@@ -691,11 +697,13 @@ int main (int argc, char ** argv)
                 {
                     failedToBoot90Days += failure->bootFailure ? 1 : 0;
                     failedToWater90Days += failure->wateringFailure ? 1 : 0;
+                    wateringInterruptFailure90Days += failure->wateringInterrupted ? 1 : 0;
                 }
 
                 // Count total failures
                 failedToBoot += failure->bootFailure ? 1 : 0;
                 failedToWater += failure->wateringFailure ? 1 : 0;
+                wateringInterruptFailure += failure->wateringInterrupted ? 1 : 0;
 
                 // Get the previous failure
                 failure = failure->previous;
@@ -723,7 +731,7 @@ int main (int argc, char ** argv)
             }
 
             // Display the failure table header
-            printf("                        %4d Days", totalDays);
+            printf("                           %4d Days", totalDays);
             if (totalDays > 90)
                 printf("   Last 90 Days");
             if (totalDays > 60)
@@ -732,7 +740,7 @@ int main (int argc, char ** argv)
                 printf("   Last 30 Days");
             printf("%s", NEW_LINE);
 
-            printf("                     ------------");
+            printf("                        ------------");
             if (totalDays > 90)
                 printf("   ------------");
             if (totalDays > 60)
@@ -742,7 +750,7 @@ int main (int argc, char ** argv)
             printf("%s", NEW_LINE);
 
             // Display the boot failures
-            printf("Boot Failures:    ");
+            printf("Boot Failures:       ");
             displayFailure(failedToBoot,       totalDays, totalDays, true);
             displayFailure(failedToBoot90Days, totalDays,        90, false);
             displayFailure(failedToBoot60Days, totalDays,        60, false);
@@ -750,7 +758,7 @@ int main (int argc, char ** argv)
             printf("%s", NEW_LINE);
 
             // Display the watering days
-            printf("Watering Days:    ");
+            printf("Watering Days:       ");
             printf("           %4d", wateringDays);
             if (totalDays > 90)
                 printf("           %4d", watering90Days);
@@ -761,11 +769,19 @@ int main (int argc, char ** argv)
             printf("%s", NEW_LINE);
 
             // Display the watering failures
-            printf("Watering Failures:");
+            printf("Watering Failures:   ");
             displayFailure(failedToWater,       wateringDays, wateringDays,   true);
             displayFailure(failedToWater90Days, wateringDays, watering90Days, false);
             displayFailure(failedToWater60Days, wateringDays, watering60Days, false);
             displayFailure(failedToWater30Days, wateringDays, watering30Days, false);
+            printf("%s", NEW_LINE);
+
+            // Display the watering interrupt failures
+            printf("Watering interrupted:");
+            displayFailure(wateringInterruptFailure,       wateringDays, wateringDays,   true);
+            displayFailure(wateringInterruptFailure90Days, wateringDays, watering90Days, false);
+            displayFailure(wateringInterruptFailure60Days, wateringDays, watering60Days, false);
+            displayFailure(wateringInterruptFailure30Days, wateringDays, watering30Days, false);
             printf("%s", NEW_LINE);
 
             // Separate the tables
