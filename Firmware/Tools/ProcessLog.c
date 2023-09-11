@@ -39,6 +39,9 @@
 
 const char * const dayName[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
+const int dayCount[] = {7, 14, 21, 28, 42, 56, 91, 182, 273, 364};
+const int dayCountEntries = sizeof(dayCount) / sizeof(dayCount[0]);
+
 //----------------------------------------
 // Data structures
 //----------------------------------------
@@ -62,9 +65,11 @@ typedef struct _FAILURE_EVENT
     bool bootFailure;
     bool wateringFailure;
     bool wateringInterrupted;
+    bool wateringDay;
     int wateringDays;
     time_t failureTime;
     struct tm failureTm;
+    int totalDays;
 } FAILURE_EVENT;
 
 typedef struct _SCHEDULE_DATA
@@ -217,6 +222,8 @@ bool processCommandDone(int vcNumber, char * command, time_t logTime, struct tm 
                     failure->wateringInterrupted = true;
                     failure->failureTime = logTime;
                     failure->failureTm = *logTm;
+                    failure->wateringDay = false;
+                    failure->totalDays = totalDays;
                     failureList = failure;
                 }
             }
@@ -414,6 +421,8 @@ void processLine(struct tm * logTm, time_t startOfDay, time_t logTime, char * li
                                 failure->wateringInterrupted = false;
                                 failure->failureTime = programmingTime;
                                 failure->failureTm = nextDayTm;
+                                failure->wateringDay = failedToWater;
+                                failure->totalDays = totalDays;
                                 failureList = failure;
                             }
 
@@ -439,6 +448,29 @@ void processLine(struct tm * logTm, time_t startOfDay, time_t logTime, char * li
                     nextDayTm = *localtime(&startOfDay);
                     nextDayTm.tm_mday += 1;
                     totalDays += 1;
+
+                    // Determine if watering occurs today
+                    dayIndex = logTm->tm_wday;
+                    watering = wateringToday(vcNumber, dayIndex, logTime);
+                    wateringDays += watering ? 1 : 0;
+
+                    // Remember this watering day
+                    if (watering)
+                    {
+                        failure = malloc(sizeof(*failure));
+                        if (failure)
+                        {
+                            failure->previous = failureList;
+                            failure->bootFailure = false;
+                            failure->wateringFailure = false;
+                            failure->wateringInterrupted = false;
+                            failure->failureTime = logTime;
+                            failure->failureTm = *logTm;
+                            failure->wateringDay = watering;
+                            failure->totalDays = totalDays;
+                            failureList = failure;
+                        }
+                    }
                 }
 
                 // Determine if watering occurs today
@@ -590,12 +622,119 @@ void displayFailure(int count, int totalDays, int maxDays, bool alwaysDisplay)
         days = maxDays;
 
     // Determine if the value should be displayed
-    if (alwaysDisplay || (maxDays && (totalDays > maxDays)))
+//    if (alwaysDisplay || (maxDays && (totalDays > maxDays)))
     {
         if (count)
             printf("   %4d (%4.1f%%)", count, (float)count * 100. / (float)days);
         else
-            printf("          0    ");
+            printf("      0        ");
+    }
+}
+
+void countFailures(int dayCount)
+{
+    int days;
+    int failedToBoot;
+    int failedToWater;
+    FAILURE_EVENT * failure;
+    int wateringDays;
+    int wateringInterrupted;
+
+    // Walk the list of events
+    failedToBoot = 0;
+    failedToWater = 0;
+    failure = failureList;
+    wateringDays = 0;
+    wateringInterrupted = 0;
+
+    while (failure)
+    {
+        // Determine if the event is within the window
+        if ((totalDays - failure->totalDays) > dayCount)
+            break;
+
+        // Count total failures
+        days = totalDays + 1 - failure->totalDays;
+        failedToBoot += failure->bootFailure ? 1 : 0;
+        failedToWater += failure->wateringFailure ? 1 : 0;
+        wateringDays += failure->wateringDay ? 1 : 0;
+        wateringInterrupted += failure->wateringInterrupted ? 1 : 0;
+
+        // Get the previous failure
+        failure = failure->previous;
+    }
+
+    // Display the failures
+    printf(" %4d", days);
+    displayFailure(failedToBoot, days, days, failedToBoot);
+    printf("    %4d", wateringDays);
+    displayFailure(failedToWater, days, days, failedToWater);
+    displayFailure(wateringInterrupted, days, days, wateringInterrupted);
+    printf("%s", NEW_LINE);
+}
+
+void processFailures()
+{
+    int index;
+
+    // Separate the analysis from the summary
+    printf("%s", NEW_LINE);
+    printf("--------------------------------------------------------------------------------%s", NEW_LINE);
+    printf("%s", NEW_LINE);
+    printf("Failure Summary:%s", NEW_LINE);
+    printf("%s", NEW_LINE);
+    printf("Total       Boot      Watering    Watering     Watering%s", NEW_LINE);
+    printf(" Days     Failures      Days      Failures    Interrupted%s", NEW_LINE);
+
+    // Display the failure summary
+    if (!failureList)
+        printf("    No boot or watering failures%s", NEW_LINE);
+    else
+    {
+        // Display the rows where days < totalDays
+        for (index = 0; index < dayCountEntries; index++)
+        {
+            if (totalDays > dayCount[index])
+                countFailures(dayCount[index]);
+        }
+
+        // Display the total days row
+        countFailures(totalDays);
+    }
+}
+
+void displayFailureList()
+{
+    FAILURE_EVENT * failure;
+
+    // Separate the tables
+    printf("%s", NEW_LINE);
+
+    // Display the individual failures table header
+    printf("  Failures%s", NEW_LINE);
+    printf("Boot   Watering     Failure Date%s", NEW_LINE);
+    printf("---- ----------- --------------------%s", NEW_LINE);
+
+    // Display the individual failures
+    failure = failureList;
+    while (failure)
+    {
+        if (failure->bootFailure
+            || failure->wateringFailure
+            || failure->wateringInterrupted)
+        {
+            printf(" %c  %s %-9s %4d-%02d-%02d%s",
+                   failure->bootFailure ? '*' : ' ',
+                   failure->wateringInterrupted ? "Interrupted" :
+                   (failure->wateringFailure ?     "     *     " :
+                                                  "           "),
+                   dayName[failure->failureTm.tm_wday],
+                   failure->failureTm.tm_year + 1900,
+                   failure->failureTm.tm_mon + 1,
+                   failure->failureTm.tm_mday,
+                   NEW_LINE);
+        }
+        failure = failure->previous;
     }
 }
 
@@ -643,172 +782,9 @@ int main (int argc, char ** argv)
 
     if (!status)
     {
-        // Count the boot failures
-        int days;
-        int failedToBoot = 0;
-        int failedToBoot30Days = 0;
-        int failedToBoot60Days = 0;
-        int failedToBoot90Days = 0;
-        int failedToWater = 0;
-        int failedToWater30Days = 0;
-        int failedToWater60Days = 0;
-        int failedToWater90Days = 0;
-        int watering30Days = 0;
-        int watering60Days = 0;
-        int watering90Days = 0;
-        int wateringInterruptFailure = 0;
-        int wateringInterruptFailure30Days = 0;
-        int wateringInterruptFailure60Days = 0;
-        int wateringInterruptFailure90Days = 0;
-
-        // Separate the analysis from the summary
-        printf("%s", NEW_LINE);
-        printf("--------------------------------------------------------------------------------%s", NEW_LINE);
-        printf("%s", NEW_LINE);
-        printf("Failure Summary:%s", NEW_LINE);
-        printf("%s", NEW_LINE);
-
-        // Display the failure summary
-        failure = failureList;
-        if (!failure)
-            printf("    No boot or watering failures%s", NEW_LINE);
-        else
-        {
-            while (failure)
-            {
-                // Count failures over 30 days
-                if (failure->failureTime >= lastLogEntryTime - (30 * SECONDS_IN_A_DAY))
-                {
-                    failedToBoot30Days += failure->bootFailure ? 1 : 0;
-                    failedToWater30Days += failure->wateringFailure ? 1 : 0;
-                    wateringInterruptFailure30Days += failure->wateringInterrupted ? 1 : 0;
-                }
-
-                // Count failures over 60 days
-                if (failure->failureTime >= lastLogEntryTime - (60 * SECONDS_IN_A_DAY))
-                {
-                    failedToBoot60Days += failure->bootFailure ? 1 : 0;
-                    failedToWater60Days += failure->wateringFailure ? 1 : 0;
-                    wateringInterruptFailure60Days += failure->wateringInterrupted ? 1 : 0;
-                }
-
-                // Count failures over 90 days
-                if (failure->failureTime >= lastLogEntryTime - (90 * SECONDS_IN_A_DAY))
-                {
-                    failedToBoot90Days += failure->bootFailure ? 1 : 0;
-                    failedToWater90Days += failure->wateringFailure ? 1 : 0;
-                    wateringInterruptFailure90Days += failure->wateringInterrupted ? 1 : 0;
-                }
-
-                // Count total failures
-                failedToBoot += failure->bootFailure ? 1 : 0;
-                failedToWater += failure->wateringFailure ? 1 : 0;
-                wateringInterruptFailure += failure->wateringInterrupted ? 1 : 0;
-
-                // Get the previous failure
-                failure = failure->previous;
-            }
-
-            // Count the watering days
-            scheduleEntry = controllerSchedule[vcNumberSent];
-            while (scheduleEntry)
-            {
-                if (scheduleEntry->watering)
-                {
-                    // Count watering days over 30 days
-                    if (scheduleEntry->programmingTime >= lastLogEntryTime - (30 * SECONDS_IN_A_DAY))
-                        watering30Days += 1;
-
-                    // Count watering days over 60 days
-                    if (scheduleEntry->programmingTime >= lastLogEntryTime - (60 * SECONDS_IN_A_DAY))
-                        watering60Days += 1;
-
-                    // Count watering days over 90 days
-                    if (scheduleEntry->programmingTime >= lastLogEntryTime - (90 * SECONDS_IN_A_DAY))
-                        watering90Days += 1;
-                }
-                scheduleEntry = scheduleEntry->previous;
-            }
-
-            // Display the failure table header
-            printf("                           %4d Days", totalDays);
-            if (totalDays > 90)
-                printf("   Last 90 Days");
-            if (totalDays > 60)
-                printf("   Last 60 Days");
-            if (totalDays > 30)
-                printf("   Last 30 Days");
-            printf("%s", NEW_LINE);
-
-            printf("                        ------------");
-            if (totalDays > 90)
-                printf("   ------------");
-            if (totalDays > 60)
-                printf("   ------------");
-            if (totalDays > 30)
-                printf("   ------------");
-            printf("%s", NEW_LINE);
-
-            // Display the boot failures
-            printf("Boot Failures:       ");
-            displayFailure(failedToBoot,       totalDays, totalDays, true);
-            displayFailure(failedToBoot90Days, totalDays,        90, false);
-            displayFailure(failedToBoot60Days, totalDays,        60, false);
-            displayFailure(failedToBoot30Days, totalDays,        30, false);
-            printf("%s", NEW_LINE);
-
-            // Display the watering days
-            printf("Watering Days:       ");
-            printf("           %4d", wateringDays);
-            if (totalDays > 90)
-                printf("           %4d", watering90Days);
-            if (totalDays > 60)
-                printf("           %4d", watering60Days);
-            if (totalDays > 30)
-                printf("           %4d", watering30Days);
-            printf("%s", NEW_LINE);
-
-            // Display the watering failures
-            printf("Watering Failures:   ");
-            displayFailure(failedToWater,       wateringDays, wateringDays,   true);
-            displayFailure(failedToWater90Days, wateringDays, watering90Days, false);
-            displayFailure(failedToWater60Days, wateringDays, watering60Days, false);
-            displayFailure(failedToWater30Days, wateringDays, watering30Days, false);
-            printf("%s", NEW_LINE);
-
-            // Display the watering interrupt failures
-            printf("Watering interrupted:");
-            displayFailure(wateringInterruptFailure,       wateringDays, wateringDays,   true);
-            displayFailure(wateringInterruptFailure90Days, wateringDays, watering90Days, false);
-            displayFailure(wateringInterruptFailure60Days, wateringDays, watering60Days, false);
-            displayFailure(wateringInterruptFailure30Days, wateringDays, watering30Days, false);
-            printf("%s", NEW_LINE);
-
-            // Separate the tables
-            printf("%s", NEW_LINE);
-
-            // Display the individual failures table header
-            printf("  Failures%s", NEW_LINE);
-            printf("Boot   Watering     Failure Date%s", NEW_LINE);
-            printf("---- ----------- --------------------%s", NEW_LINE);
-
-            // Display the individual failures
-            failure = failureList;
-            while (failure)
-            {
-                printf(" %c  %s %-9s %4d-%02d-%02d%s",
-                       failure->bootFailure ? '*' : ' ',
-                       failure->wateringInterrupted ? "Interrupted" :
-                       (failure->wateringFailure ?     "     *     " :
-                                                      "           "),
-                       dayName[failure->failureTm.tm_wday],
-                       failure->failureTm.tm_year + 1900,
-                       failure->failureTm.tm_mon + 1,
-                       failure->failureTm.tm_mday,
-                       NEW_LINE);
-                failure = failure->previous;
-            }
-        }
+        // Display the failures
+        processFailures();
+        displayFailureList();
     }
 
     // Done with the file
