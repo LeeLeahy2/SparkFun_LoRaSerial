@@ -641,6 +641,7 @@ void countFailures(int dayCount)
     int wateringInterrupted;
 
     // Walk the list of events
+    days = 0;
     failedToBoot = 0;
     failedToWater = 0;
     failure = failureList;
