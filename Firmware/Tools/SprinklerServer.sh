@@ -42,5 +42,5 @@ cd /home/lee/SparkFun/LoRaSerial/Firmware/Tools
 while [ 1 -ne 0 ]; do
 
     # Run the program
-    ./SprinklerServer   /dev/ttyACM0  web_data  No-Rem0te_Acce\$s  Makakilo_Hale_2  -2
+    /home/lee/SparkFun/LoRaSerial/Firmware/Tool/SprinklerServer   /dev/ttyACM0  web_data  "No-Rem0te_Acce\$s"  Makakilo_Hale_2  -2
 done
